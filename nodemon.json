@@ -1,0 +1,13 @@
+{
+  "ext": "ts, js, json",
+  "exec": "npx ts-node main.ts",
+  "watch": [
+    "./src",
+    "main.ts"
+  ],
+  "ignore": [
+    "tests",
+    "node_modules",
+    "src/locales"
+  ]
+}
