@@ -15,7 +15,9 @@ type AuthUserT = {
 };
 
 declare global {
+    // eslint-disable-next-line @typescript-eslint/no-namespace
     namespace Express {
+        // eslint-disable-next-line
         interface User extends AuthUserT {}
     }
 }
@@ -64,12 +66,12 @@ passport.use(
             });
 
             if (!userData) {
-                return done(null, false, { message: "Invalid Credentials" });
+                return done(null, false, { message: "User not found." });
             }
 
             const isMatch = await bcrypt.compare(password, userData.password);
             if (!isMatch) {
-                return done(null, false, { message: "Invalid credentials" });
+                return done(null, false, { message: "Incorrect email or password." });
             }
 
             return done(null, { data: userData });

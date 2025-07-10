@@ -1,13 +1,14 @@
 import express from "express";
+import {protectedRoute} from "../config/jwt-config";
 import * as controller from "../controllers/users-controllers";
 
 const router = express.Router();
 
-router.get("/", controller.getAllUsers);
-router.post("/", controller.createUser);
-router.get("/access", controller.getUserAccess);
-
-// auth routes
+router.get("/", protectedRoute, controller.getAllUsers);
+router.get("/access", protectedRoute, controller.getUserAccess);
+router.post("/create", protectedRoute, controller.createUser);
 router.post("/login", controller.loginUser);
+router.post("/logout", controller.logoutUser);
+
 
 export = router;

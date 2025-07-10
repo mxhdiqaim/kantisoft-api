@@ -1,11 +1,13 @@
 import { NextFunction, Request, Response } from "express";
 import { and, eq, ne } from "drizzle-orm";
 import db from "../db";
-import { /* managers, */ users } from "../schema/users-schema";
+import { users } from "../schema/users-schema";
 import { handleError } from "../service/error-handling";
 import { passwordHashService } from "../service/password-hash-service";
 import passport from "passport";
 import { UserStatusEnum, UserRoleEnum } from "../types/enums";
+
+import { generateToken } from '../config/jwt-config';
 
 export const getAllUsers = async (req: Request, res: Response) => {
     try {
@@ -18,14 +20,22 @@ export const getAllUsers = async (req: Request, res: Response) => {
         const hasRole = "role" in query;
 
         const data = await db
-            .select()
+            .select({
+                id: users.id,
+                firstName: users.firstName,
+                lastName: users.lastName,
+                email: users.email,
+                phone: users.phone,
+                role: users.role,
+                status: users.status,
+                createdAt: users.createdAt,
+                lastModified: users.lastModified,
+            })
             .from(users)
-            .where(
-                // query.role is a string, asserted as any over string because of a wrong type mismatch from users.role
-                and(
+            .where(and(
                     hasRole ? eq(users.role, query.role as UserRoleEnum) : undefined,
                     !isAdmin
-                        ? ne(users.status, String(UserStatusEnum.DELETED))
+                        ? ne(users.status, UserStatusEnum.DELETED)
                         : undefined
                 )
             );
@@ -46,45 +56,29 @@ export const createUser = async (req: Request, res: Response) => {
             return handleError(res, "User not authenticated", 403);
         }
 
-        const currentRole = currentUser.role;
-        const targetRole: UserRoleEnum = payload.role;
+        const { role: currentRole } = currentUser;
+        const { role: targetRole } = payload;
+
 
         // Role-based creation rules
-        if (currentRole === "user") {
+        if (currentRole === UserRoleEnum.USER || currentRole === UserRoleEnum.GUEST) {
             return handleError(res, "You don't have permission to create users", 403);
         }
 
-        if (currentRole === "admin" && targetRole !== "cashier" && targetRole !== "user" && targetRole !== "guest") {
-            // Admin
+        if (currentRole !== UserRoleEnum.ADMIN && (targetRole === UserRoleEnum.ADMIN || targetRole === UserRoleEnum.CASHIER)) {
             if (targetRole !== "admin") {
-                return handleError(res, "Only Admin can create another admins", 403);
-            }
-        }
-
-        if (currentRole === "user") {
-            // Admin
-            if (targetRole === "admin" || targetRole === "cashier" || targetRole === "user" || targetRole === "guest") {
-                return handleError(res, "Only Adming can create cashier, users or guests", 403);
+                return handleError(res, "You don't have permission to create users with this role", 403);
             }
         }
 
         const hashedPassword = passwordHashService(payload.password);
 
-        const created = await db
+        await db
             .insert(users)
             .values({
                 ...payload,
                 password: hashedPassword,
-            })
-            .returning();
-
-        // If creating an admin (should only be possible through admin)
-        if (targetRole === "admin") {
-            await db.insert(users).values({
-                ...created[0],
-                role: UserRoleEnum.ADMIN,
             });
-        }
 
         res.status(200).json(null);
     } catch (error) {
@@ -109,19 +103,19 @@ export const loginUser = async (
             }
 
             if (!user) {
-                return res.status(401).json(info.message);
+                return res.status(401).json({ message: info.message });
             }
 
             // prevent login of pseudo-deleted users
             const data = await db.query.users.findFirst({
                 where: and(
                     eq(users.id, user.data.id),
-                    ne(users.status, String(UserStatusEnum.DELETED))
+                    ne(users.status, UserStatusEnum.DELETED)
                 ),
             });
 
             if (!data) {
-                return res.status(401).json("Invalid Credentials");
+                return res.status(401).json({ message: "Incorrect email or password." });
             }
 
             req.login(user, (loginError) => {
@@ -129,7 +123,10 @@ export const loginUser = async (
                     return res.status(500).json(loginError);
                 }
 
-                return res.status(200).json(user.data);
+                // Generate the token and send it in the response
+                const token = generateToken(user.data);
+
+                return res.status(200).json({ token: token });
             });
         }
     )(req, res, next);
@@ -139,7 +136,7 @@ export const logoutUser = async (req: Request, res: Response) => {
     const { user } = req;
 
     if (!user) {
-        res.status(401).json("User session expired");
+        res.status(401).json({ message: "Sorry, you have to login first." });
     }
 
     req.logout((error) => {
@@ -147,7 +144,7 @@ export const logoutUser = async (req: Request, res: Response) => {
             res.status(500).json(error);
         }
 
-        res.status(200).json(user);
+        res.status(200).json({ message: "Logged out successfully" });
     });
 };
 
@@ -158,6 +155,13 @@ export const getUserAccess = async (req: Request, res: Response) => {
         const access = {
             id: user?.data.id,
             role: user?.data.role,
+            firstName: user?.data.firstName,
+            lastName: user?.data.lastName,
+            email: user?.data.email,
+            phone: user?.data.phone,
+            status: user?.data.status,
+            createdAt: user?.data.createdAt,
+            lastModified: user?.data.lastModified,
         };
 
         res.status(200).json(access);
