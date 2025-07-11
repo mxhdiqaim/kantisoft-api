@@ -10,7 +10,7 @@ export const getAllMenuItems = async (req: Request, res: Response) => {
         res.status(200).json(allMenuItems);
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: 'Error fetching menu items' });
+        res.status(500).json({ message: 'Problem loading menu items, please try again.' });
     }
 };
 
@@ -25,7 +25,7 @@ export const getMenuItemById = async (req: Request, res: Response) => {
         res.status(200).json(menuItem[0]);
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: 'Error fetching menu item' });
+        res.status(500).json({ message: 'Problem loading menu item, please try again.' });
     }
 };
 
@@ -40,7 +40,7 @@ export const createMenuItem = async (req: Request, res: Response) => {
         res.status(201).json(newItem[0]);
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: 'Error creating menu item' });
+        res.status(500).json({ message: 'Problem creating menu items, please try again.' });
     }
 };
 
@@ -74,6 +74,6 @@ export const deleteMenuItem = async (req: Request, res: Response) => {
         res.status(200).json({ message: 'Menu item deleted successfully' });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ message: 'Error deleting menu item' });
+        res.status(500).json({ message: 'Problem deleting menu items, please try again.' });
     }
 };

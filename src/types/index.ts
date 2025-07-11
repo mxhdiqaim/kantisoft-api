@@ -1,0 +1,1 @@
+export type OrderPeriod = 'day' | 'week' | 'month';

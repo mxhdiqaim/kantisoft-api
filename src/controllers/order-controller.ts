@@ -1,10 +1,12 @@
+import {lte} from "drizzle-orm/sql/expressions/conditions";
 import { Request, Response } from 'express';
 import db from '../db';
 import { orders } from '../schema/orders-schema';
 import { orderItems } from '../schema/orders-schema';
 import { menuItems } from '../schema/menu-items-schema';
-import { eq, inArray } from 'drizzle-orm';
+import {and, eq, gte, inArray} from 'drizzle-orm';
 import { v4 as uuidv4 } from 'uuid';
+import {OrderPeriod} from "../types";
 
 // Get all orders with their items
 export const getAllOrders = async (req: Request, res: Response) => {
@@ -22,6 +24,80 @@ export const getAllOrders = async (req: Request, res: Response) => {
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Problem loading orders, please try again.' });
+    }
+};
+
+/**
+ * @desc    Get orders by a dynamic period (day, week, month). Defaults to 'day'.
+ * @route   GET /api/orders/by-period?period=week
+ */
+
+export const getOrdersByPeriod = async (req: Request, res: Response) => {
+    try {
+        // Determine the period, defaulting to 'day'.
+        const period = (req.query.period as OrderPeriod) || 'day';
+
+        if (!['day', 'week', 'month'].includes(period)) {
+            return res.status(400).json({ message: "Invalid period. Use 'day', 'week', or 'month'." });
+        }
+
+        // Calculate the start and end dates for the database query.
+        // Note: This logic uses the server's local timezone.
+        const now = new Date();
+        let startDate: Date;
+        let endDate: Date;
+
+        const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, 2 = Tuesday etc.
+
+        switch (period) {
+            case 'month':
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                startDate.setHours(0, 0, 0, 0);
+
+                endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0); // Last day of the current month
+                endDate.setHours(23, 59, 59, 999);
+                break;
+
+            case 'week':
+                startDate = new Date(now.setDate(now.getDate() - dayOfWeek));
+                startDate.setHours(0, 0, 0, 0);
+
+                endDate = new Date(startDate);
+                endDate.setDate(startDate.getDate() + 6);
+                endDate.setHours(23, 59, 59, 999);
+                break;
+
+            case 'day':
+            default:
+                startDate = new Date();
+                startDate.setHours(0, 0, 0, 0);
+
+                endDate = new Date();
+                endDate.setHours(23, 59, 59, 999);
+                break;
+        }
+
+        // 3. Query the database for orders within the calculated date range.
+        const result = await db.query.orders.findMany({
+            where: and(
+                gte(orders.createdAt, startDate),
+                lte(orders.createdAt, endDate)
+            ),
+            orderBy: (orders, { desc }) => [desc(orders.createdAt)],
+            // Fetch related order items and their menu item details for a complete response
+            with: {
+                orderItems: {
+                    with: {
+                        menuItem: true,
+                    },
+                },
+            },
+        });
+
+        return res.status(200).json(result);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Problem loading today's orders, please try again." });
     }
 };
 
