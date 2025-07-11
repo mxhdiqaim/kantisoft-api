@@ -1,6 +1,6 @@
 import express from "express";
 import {protectedRoute} from "../config/jwt-config";
-import * as controller from "../controllers/users-controllers";
+import * as controller from "../controllers/user-controller";
 
 const router = express.Router();
 
