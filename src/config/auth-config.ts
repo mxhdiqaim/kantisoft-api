@@ -1,25 +1,25 @@
-import bcrypt from "bcrypt";
-import passport from "passport";
-import { Strategy as LocalStrategy } from "passport-local";
+import bcrypt from 'bcrypt';
+import passport from 'passport';
+import { Strategy as LocalStrategy } from 'passport-local';
 
-import { users, UserSchemaT } from "../schema/users-schema";
-import db from "../db";
-import { eq } from "drizzle-orm";
+import { users, UserSchemaT } from '../schema/users-schema';
+import db from '../db';
+import { eq } from 'drizzle-orm';
 
 type UserT = {
-    id: UserSchemaT["id"];
+  id: UserSchemaT['id'];
 };
 
 type AuthUserT = {
-    data: UserSchemaT;
+  data: UserSchemaT;
 };
 
 declare global {
-    // eslint-disable-next-line @typescript-eslint/no-namespace
-    namespace Express {
-        // eslint-disable-next-line
-        interface User extends AuthUserT {}
-    }
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Express {
+    // eslint-disable-next-line
+    interface User extends AuthUserT {}
+  }
 }
 
 // steps for passport auth
@@ -30,53 +30,60 @@ declare global {
 // --> passport.deserialize: uses that user id and type from cookie to get user data which is used to authenticate request (added to req object)
 
 passport.serializeUser((user, done) => {
-    const { data } = user;
-    const _user = {
-        id: data.id,
-    };
+  const { data } = user;
+  const _user = {
+    id: data.id,
+  };
 
-    done(null, _user);
+  done(null, _user);
 });
 
 passport.deserializeUser(async (user: UserT, done) => {
-    try {
-        const fetchUserData = async () =>
-            await db.query.users.findFirst({
-                where: eq(users.id, user.id),
-            });
+  try {
+    const fetchUserData = async () =>
+      await db.query.users.findFirst({
+        where: eq(users.id, user.id),
+      });
 
-        const data = await fetchUserData();
+    const data = await fetchUserData();
 
-        if (!data) {
-            return done(new Error("User not found"));
-        }
-
-        return done(null, { data });
-    } catch (error) {
-        return done(error);
+    if (!data) {
+      return done(new Error('Wrong email or password'));
     }
+
+    return done(null, { data });
+  } catch (error) {
+    return done(error);
+  }
 });
 
 passport.use(
-    "user",
-    new LocalStrategy({ usernameField: "email", passReqToCallback: true }, async (req, email, password, done) => {
-        try {
-            const userData = await db.query.users.findFirst({
-                where: eq(users.email, email),
-            });
+  'user',
+  new LocalStrategy(
+    { usernameField: 'email', passReqToCallback: true },
+    async (req, email, password, done) => {
+      try {
+        const userData = await db.query.users.findFirst({
+          where: eq(users.email, email),
+        });
 
-            if (!userData) {
-                return done(null, false, { message: "User not found." });
-            }
-
-            const isMatch = await bcrypt.compare(password, userData.password);
-            if (!isMatch) {
-                return done(null, false, { message: "Incorrect email or password." });
-            }
-
-            return done(null, { data: userData });
-        } catch (error) {
-            return done(error);
+        if (!userData) {
+          return done(null, false, {
+            message: 'Wrong email or password',
+          });
         }
-    })
+
+        const isMatch = await bcrypt.compare(password, userData.password);
+        if (!isMatch) {
+          return done(null, false, {
+            message: 'Wrong email or password',
+          });
+        }
+
+        return done(null, { data: userData });
+      } catch (error) {
+        return done(error);
+      }
+    },
+  ),
 );

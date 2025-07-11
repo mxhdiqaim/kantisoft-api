@@ -16,8 +16,9 @@
 .DS_Store
 
 # environment varibales
-.env.local
 .env
+.env.local
+.env.prod
 
 # log files
 npm-debug.log*
