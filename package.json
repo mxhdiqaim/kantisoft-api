@@ -4,9 +4,11 @@
   "main": "main.ts",
   "scripts": {
     "dev": "nodemon",
+    "build": "tsc",
     "start": "ts-node main.ts",
     "generate": "drizzle-kit generate",
     "migrate": "ts-node src/db/migrate.ts",
+    "migrate:prod": "node dist/db/migrate.js",
     "seed": "ts-node src/db/seed.ts"
   },
   "keywords": [],
