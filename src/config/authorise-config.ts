@@ -1,11 +1,13 @@
-import { NextFunction, Request, Response } from "express";
+import { NextFunction, Request, Response } from 'express';
 
 const authorizeAdmin = (req: Request, res: Response, next: NextFunction) => {
     if (req.isAuthenticated && req.isAuthenticated()) {
         return next();
     }
 
-    res.status(403).json({message: "You are not allowed to perform this action"});
+    res.status(403).json({
+        message: 'You are not allowed to perform this action',
+    });
 };
 
 /**
@@ -13,9 +15,12 @@ const authorizeAdmin = (req: Request, res: Response, next: NextFunction) => {
  */
 const authorityCheck = (req: Request, res: Response, next: NextFunction) => {
     // const formRoute = "/form";
-    const openRoutes: string[] = ["/users/login"]; // Routes to exclude from authorisation
+    const openRoutes: string[] = ['/users/login']; // Routes to exclude from authorisation
 
-    if (openRoutes.some((route) => req.path.startsWith(route)) || req.path.match(/^\/check\/\d+/)) {
+    if (
+        openRoutes.some((route) => req.path.startsWith(route)) ||
+        req.path.match(/^\/check\/\d+/)
+    ) {
         return next();
     }
 

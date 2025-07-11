@@ -1,17 +1,17 @@
-import { NextFunction, Request, Response } from "express";
-import { and, eq, ne } from "drizzle-orm";
-import db from "../db";
-import { users } from "../schema/users-schema";
-import { handleError } from "../service/error-handling";
-import { passwordHashService } from "../service/password-hash-service";
+import {and, eq, ne} from "drizzle-orm";
+import {NextFunction, Request, Response} from "express";
 import passport from "passport";
-import { UserStatusEnum, UserRoleEnum } from "../types/enums";
 
-import { generateToken } from '../config/jwt-config';
+import {generateToken} from '../config/jwt-config';
+import db from "../db";
+import {users} from "../schema/users-schema";
+import {handleError} from "../service/error-handling";
+import {passwordHashService} from "../service/password-hash-service";
+import {UserRoleEnum, UserStatusEnum} from "../types/enums";
 
 export const getAllUsers = async (req: Request, res: Response) => {
     try {
-        const { query } = req;
+        const {query} = req;
         const user = req.user?.data;
         const isAdmin = user?.role === UserRoleEnum.ADMIN;
 
@@ -56,8 +56,8 @@ export const createUser = async (req: Request, res: Response) => {
             return handleError(res, "User not authenticated", 403);
         }
 
-        const { role: currentRole } = currentUser;
-        const { role: targetRole } = payload;
+        const {role: currentRole} = currentUser;
+        const {role: targetRole} = payload;
 
 
         // Role-based creation rules
@@ -103,7 +103,7 @@ export const loginUser = async (
             }
 
             if (!user) {
-                return res.status(401).json({ message: info.message });
+                return res.status(401).json({message: info.message});
             }
 
             // prevent login of pseudo-deleted users
@@ -115,7 +115,7 @@ export const loginUser = async (
             });
 
             if (!data) {
-                return res.status(401).json({ message: "Incorrect email or password." });
+                return res.status(401).json({message: "Incorrect email or password."});
             }
 
             req.login(user, (loginError) => {
@@ -126,17 +126,17 @@ export const loginUser = async (
                 // Generate the token and send it in the response
                 const token = generateToken(user.data);
 
-                return res.status(200).json({ token: token });
+                return res.status(200).json({token: token});
             });
         }
     )(req, res, next);
 };
 
 export const logoutUser = async (req: Request, res: Response) => {
-    const { user } = req;
+    const {user} = req;
 
     if (!user) {
-        res.status(401).json({ message: "Sorry, you have to login first." });
+        res.status(401).json({message: "Sorry, you have to login first."});
     }
 
     req.logout((error) => {
@@ -144,7 +144,7 @@ export const logoutUser = async (req: Request, res: Response) => {
             res.status(500).json(error);
         }
 
-        res.status(200).json({ message: "Logged out successfully" });
+        res.status(200).json({message: "Logged out successfully"});
     });
 };
 
