@@ -1,11 +1,12 @@
-import {and, eq, gte, inArray} from 'drizzle-orm';
-import {lte} from "drizzle-orm/sql/expressions/conditions";
-import {Request, Response} from 'express';
-import {v4 as uuidv4} from 'uuid';
-import db from '../db';
-import {menuItems} from '../schema/menu-items-schema';
-import {orderItems, orders} from '../schema/orders-schema';
-import {OrderPeriod} from "../types";
+import { and, eq, gte, inArray } from "drizzle-orm";
+import { lte } from "drizzle-orm/sql/expressions/conditions";
+import { Request, Response } from "express";
+import { v4 as uuidv4 } from "uuid";
+import db from "../db";
+import { menuItems } from "../schema/menu-items-schema";
+import { orderItems, orders } from "../schema/orders-schema";
+import { OrderPeriod } from "../types";
+import { OrderPaymentMethodEnum, OrderStatusEnum } from "../types/enums";
 
 // Get all orders with their items
 export const getAllOrders = async (req: Request, res: Response) => {
@@ -22,7 +23,9 @@ export const getAllOrders = async (req: Request, res: Response) => {
         res.status(200).json(allOrders);
     } catch (error) {
         console.error(error);
-        res.status(500).json({message: 'Problem loading orders, please try again.'});
+        res.status(500).json({
+            message: "Problem loading orders, please try again.",
+        });
     }
 };
 
@@ -34,10 +37,12 @@ export const getAllOrders = async (req: Request, res: Response) => {
 export const getOrdersByPeriod = async (req: Request, res: Response) => {
     try {
         // Determine the period, defaulting to 'day'.
-        const period = (req.query.period as OrderPeriod) || 'day';
+        const period = (req.query.period as OrderPeriod) || "day";
 
-        if (!['day', 'week', 'month'].includes(period)) {
-            return res.status(400).json({message: "Invalid period. Use 'day', 'week', or 'month'."});
+        if (!["day", "week", "month"].includes(period)) {
+            return res.status(400).json({
+                message: "Invalid period. Use 'day', 'week', or 'month'.",
+            });
         }
 
         // Calculate the start and end dates for the database query.
@@ -49,7 +54,7 @@ export const getOrdersByPeriod = async (req: Request, res: Response) => {
         const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, 2 = Tuesday etc.
 
         switch (period) {
-            case 'month':
+            case "month":
                 startDate = new Date(now.getFullYear(), now.getMonth(), 1);
                 startDate.setHours(0, 0, 0, 0);
 
@@ -57,7 +62,7 @@ export const getOrdersByPeriod = async (req: Request, res: Response) => {
                 endDate.setHours(23, 59, 59, 999);
                 break;
 
-            case 'week':
+            case "week":
                 startDate = new Date(now.setDate(now.getDate() - dayOfWeek));
                 startDate.setHours(0, 0, 0, 0);
 
@@ -66,7 +71,7 @@ export const getOrdersByPeriod = async (req: Request, res: Response) => {
                 endDate.setHours(23, 59, 59, 999);
                 break;
 
-            case 'day':
+            case "day":
             default:
                 startDate = new Date();
                 startDate.setHours(0, 0, 0, 0);
@@ -80,11 +85,17 @@ export const getOrdersByPeriod = async (req: Request, res: Response) => {
         const result = await db.query.orders.findMany({
             where: and(
                 gte(orders.createdAt, startDate),
-                lte(orders.createdAt, endDate)
+                lte(orders.createdAt, endDate),
             ),
-            orderBy: (orders, {desc}) => [desc(orders.createdAt)],
+            orderBy: (orders, { desc }) => [desc(orders.createdAt)],
             // Fetch related order items and their menu item details for a complete response
             with: {
+                seller: {
+                    columns: {
+                        firstName: true,
+                        lastName: true,
+                    },
+                },
                 orderItems: {
                     with: {
                         menuItem: true,
@@ -96,14 +107,16 @@ export const getOrdersByPeriod = async (req: Request, res: Response) => {
         return res.status(200).json(result);
     } catch (error) {
         console.error(error);
-        res.status(500).json({message: "Problem loading today's orders, please try again."});
+        res.status(500).json({
+            message: "Problem loading today's orders, please try again.",
+        });
     }
 };
 
 // Get a single order by ID with its items
 export const getOrderById = async (req: Request, res: Response) => {
     try {
-        const {id} = req.params;
+        const { id } = req.params;
         const order = await db.query.orders.findFirst({
             where: eq(orders.id, id),
             with: {
@@ -116,12 +129,14 @@ export const getOrderById = async (req: Request, res: Response) => {
         });
 
         if (!order) {
-            return res.status(404).json({message: 'The order is not found'});
+            return res.status(404).json({ message: "The order is not found" });
         }
         res.status(200).json(order);
     } catch (error) {
         console.error(error);
-        res.status(500).json({message: 'Problem loading order, please try again.'});
+        res.status(500).json({
+            message: "Problem loading order, please try again.",
+        });
     }
 };
 
@@ -130,43 +145,66 @@ export const createOrder = async (req: Request, res: Response) => {
     // The request body should look like this:
     // {
     //   "sellerId": "some-uuid", (for the user taking the order)
+    //   "paymentMethod": "paymentMethod",
+    //   "orderStatus": "orderStatus",
     //   "items": [
     //     { "menuItemId": "uuid-for-burger", "quantity": 2 },
     //     { "menuItemId": "uuid-for-fries", "quantity": 1 }
     //   ]
     // }
     try {
-        const {sellerId, items} = req.body;
+        const {
+            sellerId,
+            items,
+            paymentMethod = "cash" as OrderPaymentMethodEnum,
+            orderStatus = "completed" as OrderStatusEnum,
+        } = req.body;
 
         if (!items || !Array.isArray(items) || items.length === 0) {
-            return res.status(400).json({message: 'Order must contain at least one item.'});
+            return res
+                .status(400)
+                .json({ message: "Order must contain at least one item." });
         }
         if (!sellerId) {
-            return res.status(400).json({message: 'sellerId is required.'});
+            return res.status(400).json({ message: "Seller is required." });
         }
 
-        const menuItemIds: string[] = items.map(item => item.menuItemId);
+        const menuItemIds: string[] = items.map((item) => item.menuItemId);
 
         // 1. Verify that all menu items exist and get their current prices
-        const existingMenuItems = await db.select().from(menuItems).where(inArray(menuItems.id, menuItemIds));
+        const existingMenuItems = await db
+            .select()
+            .from(menuItems)
+            .where(inArray(menuItems.id, menuItemIds));
+
         if (existingMenuItems.length !== menuItemIds.length) {
-            return res.status(400).json({message: 'One or more menu items not found.'});
+            return res
+                .status(400)
+                .json({ message: "One or more menu items not found." });
         }
 
-        const priceMap = new Map(existingMenuItems.map(item => [item.id, item.price]));
+        const priceMap = new Map(
+            existingMenuItems.map((item) => [item.id, item.price]),
+        );
 
         // 2. Calculate total price
         let totalAmount = 0;
-        const orderItemsToInsert = items.map(item => {
+        const orderItemsToInsert = items.map((item) => {
             const priceAtOrder = priceMap.get(item.menuItemId);
             if (priceAtOrder === undefined) {
-                throw new Error(`Could not find price for menu item ${item.menuItemId}`);
+                throw new Error(
+                    `Could not find price for menu item ${item.menuItemId}`,
+                );
             }
-            totalAmount += priceAtOrder * item.quantity;
+
+            // totalAmount += priceAtOrder * item.quantity;
+            const subTotal = priceAtOrder * item.quantity;
+            totalAmount += subTotal;
             return {
                 menuItemId: item.menuItemId,
                 quantity: item.quantity,
                 priceAtOrder: priceAtOrder,
+                subTotal: subTotal,
             };
         });
 
@@ -177,12 +215,14 @@ export const createOrder = async (req: Request, res: Response) => {
             // Insert into the parent 'orders' table
             await tx.insert(orders).values({
                 id: newOrderId,
-                sellerId,
                 totalAmount,
+                paymentMethod,
+                orderStatus,
+                sellerId,
             });
 
             // Insert into the 'orderItems' table
-            const newOrderItemsData = orderItemsToInsert.map(item => ({
+            const newOrderItemsData = orderItemsToInsert.map((item) => ({
                 ...item,
                 orderId: newOrderId,
             }));
@@ -202,10 +242,11 @@ export const createOrder = async (req: Request, res: Response) => {
         });
 
         res.status(201).json(newOrder);
-
     } catch (error) {
         console.error(error);
-        res.status(500).json({message: 'Problem creating order, please try again.'});
+        res.status(500).json({
+            message: "Problem creating order, please try again.",
+        });
     }
 };
 
@@ -216,42 +257,52 @@ export const createOrder = async (req: Request, res: Response) => {
 // Update an order's status
 export const updateOrderStatus = async (req: Request, res: Response) => {
     try {
-        const {id} = req.params;
-        const {orderStatus} = req.body; // e.g. 'pending', 'completed', 'cancelled'
+        const { id } = req.params;
+        const { orderStatus } = req.body; // e.g. 'pending', 'completed', 'cancelled'
 
         if (!orderStatus) {
-            return res.status(400).json({message: 'Order status is required.'});
+            return res
+                .status(400)
+                .json({ message: "Order status is required." });
         }
 
-        const updatedOrder = await db.update(orders)
-            .set({orderStatus})
+        const updatedOrder = await db
+            .update(orders)
+            .set({ orderStatus })
             .where(eq(orders.id, id))
             .returning();
 
         if (updatedOrder.length === 0) {
-            return res.status(404).json({message: 'The order is not found'});
+            return res.status(404).json({ message: "The order is not found" });
         }
 
         res.status(200).json(updatedOrder[0]);
     } catch (error) {
         console.error(error);
-        res.status(500).json({message: 'Problem updating order, please try again.'});
+        res.status(500).json({
+            message: "Problem updating order, please try again.",
+        });
     }
 };
 
 // Delete an order
 export const deleteOrder = async (req: Request, res: Response) => {
     try {
-        const {id} = req.params;
+        const { id } = req.params;
         // The 'onDelete: cascade' in the schema will automatically delete related orderItems.
-        const deletedOrder = await db.delete(orders).where(eq(orders.id, id)).returning();
+        const deletedOrder = await db
+            .delete(orders)
+            .where(eq(orders.id, id))
+            .returning();
 
         if (deletedOrder.length === 0) {
-            return res.status(404).json({message: 'The order is not found'});
+            return res.status(404).json({ message: "The order is not found" });
         }
-        res.status(200).json({message: 'Order deleted successfully'});
+        res.status(200).json({ message: "Order deleted successfully" });
     } catch (error) {
         console.error(error);
-        res.status(500).json({message: 'Problem deleting order, please try again.'});
+        res.status(500).json({
+            message: "Problem deleting order, please try again.",
+        });
     }
 };
