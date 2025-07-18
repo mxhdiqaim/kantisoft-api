@@ -4,6 +4,7 @@ import db from "../db";
 import { menuItems } from "../schema/menu-items-schema";
 import { generateUniqueItemCode } from "../utils/generate-unique-item-code";
 import { handleError } from "../service/error-handling";
+import { StatusCodeEnum } from "../types/enums";
 
 // Get all menu items
 export const getAllMenuItems = async (req: Request, res: Response) => {
@@ -12,9 +13,7 @@ export const getAllMenuItems = async (req: Request, res: Response) => {
         res.status(200).json(allMenuItems);
     } catch (error) {
         console.error(error);
-        res.status(500).json({
-            message: "Problem loading menu items, please try again.",
-        });
+        handleError(res, "Problem loading menu items, please try again", 500);
     }
 };
 
@@ -107,7 +106,12 @@ export const updateMenuItem = async (req: Request, res: Response) => {
         });
 
         if (!currentItem) {
-            return res.status(404).json({ message: "Menu item not found" });
+            return handleError(
+                res,
+                "Menu item not found",
+                StatusCodeEnum.NOT_FOUND,
+            );
+            // return res.status(404).json({ message: "Menu item not found" });
         }
 
         const updateData: {
@@ -130,9 +134,14 @@ export const updateMenuItem = async (req: Request, res: Response) => {
         }
 
         if (Object.keys(updateData).length === 0) {
-            return res
-                .status(400)
-                .json({ message: "No fields to update provided." });
+            return handleError(
+                res,
+                "No fields to update provided.",
+                StatusCodeEnum.BAD_REQUEST,
+            );
+            // return res
+            //     .status(400)
+            //     .json({ message: "No fields to update provided." });
         }
 
         const updatedItem = await db
@@ -142,43 +151,23 @@ export const updateMenuItem = async (req: Request, res: Response) => {
             .returning();
 
         if (updatedItem.length === 0) {
-            return res.status(404).json({ message: "Menu item not found" });
+            return handleError(
+                res,
+                "Menu item not found or no changes made.",
+                StatusCodeEnum.NOT_FOUND,
+            );
         }
         res.status(200).json(updatedItem[0]);
     } catch (error) {
         // Handle potential unique constraint errors, e.g., if the new name is already taken
-        if (
-            error &&
-            typeof error === "object" &&
-            "code" in error &&
-            error.code === "23505"
-        ) {
-            return res.status(409).json({
-                message: "The provided name or item code is already in use.",
-            });
-        }
-        handleError(res, error);
+        console.error(error);
+        handleError(
+            res,
+            "The provided name or item code is already in use.",
+            StatusCodeEnum.CONFLICT,
+        );
     }
 };
-
-// export const updateMenuItem = async (req: Request, res: Response) => {
-//     try {
-//         const { id } = req.params;
-//         const { name, price, isAvailable } = req.body;
-//         const updatedItem = await db
-//             .update(menuItems)
-//             .set({ name, price, isAvailable })
-//             .where(eq(menuItems.id, id))
-//             .returning();
-//         if (updatedItem.length === 0) {
-//             return res.status(404).json({ message: "Menu item not found" });
-//         }
-//         res.status(200).json(updatedItem[0]);
-//     } catch (error) {
-//         console.error(error);
-//         res.status(500).json({ message: "Error updating menu item" });
-//     }
-// };
 
 // Delete a menu item
 export const deleteMenuItem = async (req: Request, res: Response) => {

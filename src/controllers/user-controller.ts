@@ -7,7 +7,7 @@ import db from "../db";
 import { users } from "../schema/users-schema";
 import { handleError } from "../service/error-handling";
 import { passwordHashService } from "../service/password-hash-service";
-import { UserRoleEnum, UserStatusEnum } from "../types/enums";
+import { StatusCodeEnum, UserRoleEnum, UserStatusEnum } from "../types/enums";
 
 export const getAllUsers = async (req: Request, res: Response) => {
     try {
@@ -45,7 +45,12 @@ export const getAllUsers = async (req: Request, res: Response) => {
 
         res.status(200).json(data);
     } catch (error) {
-        handleError(res, error);
+        console.error(error);
+        handleError(
+            res,
+            "Problem loading users, please try again",
+            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+        );
     }
 };
 
@@ -97,7 +102,12 @@ export const createUser = async (req: Request, res: Response) => {
 
         res.status(200).json(null);
     } catch (error) {
-        handleError(res, error);
+        console.error(error);
+        handleError(
+            res,
+            "Problem creating user, please try again",
+            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+        );
     }
 };
 
@@ -194,6 +204,11 @@ export const getUserAccess = async (req: Request, res: Response) => {
 
         res.status(200).json(access);
     } catch (error) {
-        handleError(res, error);
+        console.error(error);
+        handleError(
+            res,
+            "Problem loading user access, please try again",
+            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+        );
     }
 };

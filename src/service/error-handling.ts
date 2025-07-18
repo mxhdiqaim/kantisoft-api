@@ -1,22 +1,35 @@
 import { Response } from "express";
+import { StatusCodeEnum } from "../types/enums";
 
-type ErrorMessage = { isError: boolean; message: string };
+export const handleError = (
+    res: Response,
+    message: string,
+    statusCode: StatusCodeEnum = StatusCodeEnum.INTERNAL_SERVER_ERROR,
+) => {
+    const errorObj =
+        typeof message === "string"
+            ? { type: StatusCodeEnum.INTERNAL_SERVER_ERROR, message }
+            : {
+                  type: statusCode ?? StatusCodeEnum.INTERNAL_SERVER_ERROR,
+                  message,
+              };
 
-// eslint-disable-next-line
-type ErrorType = ErrorMessage | any;
-
-export const handleError = (res: Response, error: ErrorType, statusCode: number = 500) => {
-    const errorMessage = statusCode === 500 ? "Internal Server Error" : error.message || error;
+    const errorMessage =
+        statusCode === 500
+            ? "Internal Server Error"
+            : errorObj.message || Error;
 
     if (process.env.NODE_ENV === "development") {
-        console.log("An error occurred, see the error below:");
-        console.error(error);
-        return res.status(statusCode).json({ isError: error.isError || true, message: errorMessage });
+        console.log("An error occurred with the type:", errorObj.type);
+        console.error(errorObj.message || "An error occurred:", errorObj);
+        return res
+            .status(statusCode)
+            .json({ type: errorObj.type || "error", message: errorMessage });
     }
 
-    console.error(error); // log to a production server can be integrated with tools like Sentry
+    console.error("An error occurred:", errorObj); // log to a production server can be integrated with tools like Sentry
     return res.status(statusCode).json({
-        isError: error.isError || true,
-        message: errorMessage,
+        type: errorObj.type,
+        message: errorObj.message,
     });
 };

@@ -7,7 +7,12 @@ import db from "../db";
 import { menuItems } from "../schema/menu-items-schema";
 import { orderItems, orders } from "../schema/orders-schema";
 import { OrderPeriod } from "../types";
-import { OrderPaymentMethodEnum, OrderStatusEnum } from "../types/enums";
+import {
+    OrderPaymentMethodEnum,
+    OrderStatusEnum,
+    StatusCodeEnum,
+} from "../types/enums";
+import { handleError } from "../service/error-handling";
 
 export const getAllOrders = async (req: Request, res: Response) => {
     try {
@@ -168,12 +173,22 @@ export const createOrder = async (req: Request, res: Response) => {
         } = req.body;
 
         if (!items || !Array.isArray(items) || items.length === 0) {
-            return res
-                .status(400)
-                .json({ message: "Order must contain at least one item." });
+            return handleError(
+                res,
+                "Order must contain at least one item.",
+                StatusCodeEnum.BAD_REQUEST,
+            );
+            // return res
+            //     .status(400)
+            //     .json({ message: "Order must contain at least one item." });
         }
         if (!sellerId) {
-            return res.status(400).json({ message: "Seller is required." });
+            return handleError(
+                res,
+                "Seller is required.",
+                StatusCodeEnum.BAD_REQUEST,
+            );
+            // return res.status(400).json({ message: "Seller is required." })
         }
 
         const menuItemIds: string[] = items.map((item) => item.menuItemId);
@@ -185,9 +200,14 @@ export const createOrder = async (req: Request, res: Response) => {
             .where(inArray(menuItems.id, menuItemIds));
 
         if (existingMenuItems.length !== menuItemIds.length) {
-            return res
-                .status(400)
-                .json({ message: "One or more menu items not found." });
+            return handleError(
+                res,
+                "One or more menu items not found.",
+                StatusCodeEnum.NOT_FOUND,
+            );
+            // return res
+            //     .status(400)
+            //     .json({ message: "One or more menu items not found." });
         }
 
         const priceMap = new Map(
@@ -251,9 +271,14 @@ export const createOrder = async (req: Request, res: Response) => {
         res.status(201).json(newOrder);
     } catch (error) {
         console.error(error);
-        res.status(500).json({
-            message: "Problem creating order, please try again.",
-        });
+        return handleError(
+            res,
+            "Problem creating order, please try again",
+            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+        );
+        // res.status(500).json({
+        //     message: "Problem creating order, please try again.",
+        // });
     }
 };
 
