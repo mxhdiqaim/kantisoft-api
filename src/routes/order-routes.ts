@@ -10,5 +10,4 @@ router.post("/create", controller.createOrder);
 router.put("/:id", controller.updateOrderStatus);
 router.delete("/:id", controller.deleteOrder);
 
-
 export = router;

@@ -1,4 +1,5 @@
 import { and, eq, gte, inArray } from "drizzle-orm";
+import { sql, desc } from "drizzle-orm"; // Add this import if not present
 import { lte } from "drizzle-orm/sql/expressions/conditions";
 import { Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
@@ -8,7 +9,6 @@ import { orderItems, orders } from "../schema/orders-schema";
 import { OrderPeriod } from "../types";
 import { OrderPaymentMethodEnum, OrderStatusEnum } from "../types/enums";
 
-// Get all orders with their items
 export const getAllOrders = async (req: Request, res: Response) => {
     try {
         const allOrders = await db.query.orders.findMany({
@@ -113,13 +113,21 @@ export const getOrdersByPeriod = async (req: Request, res: Response) => {
     }
 };
 
-// Get a single order by ID with its items
 export const getOrderById = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
+
+        console.log("id", id);
+
         const order = await db.query.orders.findFirst({
             where: eq(orders.id, id),
             with: {
+                seller: {
+                    columns: {
+                        firstName: true,
+                        lastName: true,
+                    },
+                },
                 orderItems: {
                     with: {
                         menuItem: true,
@@ -140,7 +148,6 @@ export const getOrderById = async (req: Request, res: Response) => {
     }
 };
 
-// Create a new order
 export const createOrder = async (req: Request, res: Response) => {
     // The request body should look like this:
     // {
@@ -303,6 +310,44 @@ export const deleteOrder = async (req: Request, res: Response) => {
         console.error(error);
         res.status(500).json({
             message: "Problem deleting order, please try again.",
+        });
+    }
+};
+
+// Get the most ordered item
+export const getMostOrderedItem = async (req: Request, res: Response) => {
+    try {
+        // Aggregate total quantity for each menu item
+        const result = await db
+            .select({
+                menuItemId: orderItems.menuItemId,
+                totalQuantity: sql<number>`SUM(${orderItems.quantity})`.as(
+                    "totalQuantity",
+                ),
+            })
+            .from(orderItems)
+            .groupBy(orderItems.menuItemId)
+            .orderBy(desc(sql`totalQuantity`))
+            .limit(1);
+
+        if (result.length === 0) {
+            return res.status(404).json({ message: "No orders found." });
+        }
+
+        // Fetch menu item details
+        const menuItem = await db.query.menuItems.findFirst({
+            where: (menuItems, { eq }) =>
+                eq(menuItems.id, result[0].menuItemId),
+        });
+
+        res.status(200).json({
+            menuItem,
+            totalQuantity: result[0].totalQuantity,
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({
+            message: "Problem fetching most ordered item, please try again.",
         });
     }
 };
