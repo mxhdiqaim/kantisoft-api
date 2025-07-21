@@ -39,7 +39,13 @@ export const getMenuItemById = async (req: Request, res: Response) => {
 
 // Create a new menu item
 export const createMenuItem = async (req: Request, res: Response) => {
-    const { name, price, isAvailable, itemCode: providedItemCode } = req.body;
+    const {
+        name,
+        price,
+        isAvailable,
+        itemCode: providedItemCode,
+        storeId,
+    } = req.body;
 
     try {
         const existingItemByName = await db
@@ -49,10 +55,11 @@ export const createMenuItem = async (req: Request, res: Response) => {
             .limit(1);
 
         if (existingItemByName.length > 0) {
-            return res.status(409).json({
-                message:
-                    "Name already exists. Please edit the menu item rather than creating a new one.",
-            });
+            return handleError(
+                res,
+                "Name already exists. Please edit the menu item rather than creating a new one.",
+                StatusCodeEnum.CONFLICT,
+            );
         }
 
         let finalItemCode: string;
@@ -65,9 +72,11 @@ export const createMenuItem = async (req: Request, res: Response) => {
                 .limit(1);
 
             if (existingItem.length > 0) {
-                return res.status(409).json({
-                    message: `Item code '${providedItemCode}' is already in use. Please provide a different one or leave it blank to auto-generate.`,
-                });
+                return handleError(
+                    res,
+                    `Item code '${providedItemCode}' is already in use. Please provide a different one or leave it blank to auto-generate.`,
+                    StatusCodeEnum.CONFLICT,
+                );
             }
 
             finalItemCode = providedItemCode;
@@ -76,14 +85,20 @@ export const createMenuItem = async (req: Request, res: Response) => {
             finalItemCode = await generateUniqueItemCode();
         }
 
-        if (!name || price === undefined) {
+        if (!name || price === undefined || !storeId) {
             return res
                 .status(400)
                 .json({ message: "Name and price are required" });
         }
         const newItem = await db
             .insert(menuItems)
-            .values({ name, price, isAvailable, itemCode: finalItemCode })
+            .values({
+                name,
+                price: String(price),
+                isAvailable,
+                itemCode: finalItemCode,
+                storeId,
+            })
             .returning();
         res.status(201).json(newItem[0]);
     } catch (error) {
@@ -111,18 +126,17 @@ export const updateMenuItem = async (req: Request, res: Response) => {
                 "Menu item not found",
                 StatusCodeEnum.NOT_FOUND,
             );
-            // return res.status(404).json({ message: "Menu item not found" });
         }
 
         const updateData: {
             name?: string;
-            price?: number;
+            price?: string;
             isAvailable?: boolean;
             itemCode?: string;
         } = {};
 
         if (name !== undefined) updateData.name = name;
-        if (price !== undefined) updateData.price = price;
+        if (price !== undefined) updateData.price = String(price);
         if (isAvailable !== undefined) updateData.isAvailable = isAvailable;
 
         // If an item code is provided, use it.

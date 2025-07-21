@@ -194,6 +194,7 @@ export const createOrder = async (req: Request, res: Response) => {
     try {
         const {
             sellerId,
+            storeId,
             items,
             paymentMethod = "cash" as OrderPaymentMethodEnum,
             orderStatus = "completed" as OrderStatusEnum,
@@ -205,9 +206,6 @@ export const createOrder = async (req: Request, res: Response) => {
                 "Order must contain at least one item.",
                 StatusCodeEnum.BAD_REQUEST,
             );
-            // return res
-            //     .status(400)
-            //     .json({ message: "Order must contain at least one item." });
         }
         if (!sellerId) {
             return handleError(
@@ -215,7 +213,14 @@ export const createOrder = async (req: Request, res: Response) => {
                 "Seller is required.",
                 StatusCodeEnum.BAD_REQUEST,
             );
-            // return res.status(400).json({ message: "Seller is required." })
+        }
+
+        if (!storeId) {
+            return handleError(
+                res,
+                "Store is required",
+                StatusCodeEnum.BAD_REQUEST,
+            );
         }
 
         const menuItemIds: string[] = items.map((item) => item.menuItemId);
@@ -232,9 +237,6 @@ export const createOrder = async (req: Request, res: Response) => {
                 "One or more menu items not found.",
                 StatusCodeEnum.NOT_FOUND,
             );
-            // return res
-            //     .status(400)
-            //     .json({ message: "One or more menu items not found." });
         }
 
         const priceMap = new Map(
@@ -244,19 +246,19 @@ export const createOrder = async (req: Request, res: Response) => {
         // 2. Calculate total price
         let totalAmount = 0;
         const orderItemsToInsert = items.map((item) => {
-            const priceAtOrder = priceMap.get(item.menuItemId);
-            if (priceAtOrder === undefined) {
+            const priceString = priceMap.get(item.menuItemId);
+            if (priceString === undefined) {
                 throw new Error(
                     `Could not find price for menu item ${item.menuItemId}`,
                 );
             }
 
-            // totalAmount += priceAtOrder * item.quantity;
+            const priceAtOrder = parseFloat(priceString);
             const subTotal = priceAtOrder * item.quantity;
             totalAmount += subTotal;
             return {
                 menuItemId: item.menuItemId,
-                quantity: item.quantity,
+                quantity: String(item.quantity),
                 priceAtOrder: priceAtOrder,
                 subTotal: subTotal,
             };
@@ -266,19 +268,21 @@ export const createOrder = async (req: Request, res: Response) => {
         const newOrder = await db.transaction(async (tx) => {
             const newOrderId = uuidv4();
 
-            // Insert into the parent 'orders' table
-            await tx.insert(orders).values({
-                id: newOrderId,
-                totalAmount,
-                paymentMethod,
-                orderStatus,
-                sellerId,
-            });
+            const [insertedOrder] = await tx
+                .insert(orders)
+                .values({
+                    totalAmount,
+                    paymentMethod,
+                    orderStatus,
+                    sellerId,
+                    storeId, // <-- Pass storeId to the insert
+                })
+                .returning({ id: orders.id });
 
             // Insert into the 'orderItems' table
             const newOrderItemsData = orderItemsToInsert.map((item) => ({
                 ...item,
-                orderId: newOrderId,
+                orderId: insertedOrder.id, // <-- Use the returned ID
             }));
             await tx.insert(orderItems).values(newOrderItemsData);
 
@@ -291,11 +295,17 @@ export const createOrder = async (req: Request, res: Response) => {
                             menuItem: true,
                         },
                     },
+                    seller: {
+                        columns: {
+                            firstName: true,
+                            lastName: true,
+                        },
+                    },
                 },
             });
         });
 
-        res.status(201).json(newOrder);
+        res.status(StatusCodeEnum.CREATED).json(newOrder);
     } catch (error) {
         console.error(error);
         return handleError(
@@ -303,9 +313,6 @@ export const createOrder = async (req: Request, res: Response) => {
             "Problem creating order, please try again",
             StatusCodeEnum.INTERNAL_SERVER_ERROR,
         );
-        // res.status(500).json({
-        //     message: "Problem creating order, please try again.",
-        // });
     }
 };
 

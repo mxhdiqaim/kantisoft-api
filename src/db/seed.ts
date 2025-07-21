@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import "dotenv/config";
 import { eq } from "drizzle-orm";
 import db, { pool } from ".";
 import { users, UserSchemaT } from "../schema/users-schema";
@@ -9,11 +9,11 @@ const createSeedAdmin = async () => {
         const data = {
             firstName: "Musa",
             lastName: "Ikechi",
-            email: "admin@example.com",
+            email: "manager@example.com",
             password: passwordHashService("password123"),
-            role: "admin",
+            role: "manager",
             status: "active",
-            phone: "",
+            phone: "08108904958",
         } as UserSchemaT;
 
         const exist = await db.query.users.findFirst({
@@ -54,4 +54,6 @@ const seed = async () => {
     console.log("Seed done");
 };
 
-seed().then(r => console.log(r)).catch(e => console.error(e));
+seed()
+    .then((r) => console.log(r))
+    .catch((e) => console.error(e));

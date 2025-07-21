@@ -1,6 +1,6 @@
 export enum UserRoleEnum {
+    MANAGER = "manager",
     ADMIN = "admin",
-    CASHIER = "cashier",
     USER = "user",
     GUEST = "guest",
 }
@@ -24,7 +24,7 @@ export enum OrderPaymentMethodEnum {
 }
 
 export enum StatusCodeEnum {
-    SUCCESS = 200,
+    OK = 200,
     CREATED = 201,
     ACCEPTED = 202,
     UNAUTHORIZED = 401,

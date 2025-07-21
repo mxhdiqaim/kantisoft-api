@@ -8,6 +8,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { menuItems } from "./menu-items-schema";
 import { users } from "./users-schema";
+import { stores } from "./stores-schema";
 
 export const orderStatusEnum = pgEnum("orderStatus", [
     "cancelled",
@@ -29,6 +30,8 @@ export const orders = pgTable("orders", {
         .default("cash"), // 'cash', 'card' or 'transfer'
     orderDate: timestamp("orderDate").defaultNow().notNull(),
     orderStatus: orderStatusEnum("orderStatus").notNull().default("completed"), // 'cancelled', 'completed' or 'pending'
+    storeId: uuid("storeId").references(() => stores.id),
+    // storeId: uuid("storeId").references(() => stores.id).notNull(),
     sellerId: uuid("sellerId")
         .references(() => users.id)
         .notNull(),

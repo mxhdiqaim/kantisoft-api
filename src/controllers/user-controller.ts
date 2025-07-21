@@ -49,46 +49,51 @@ export const createUser = async (req: Request, res: Response) => {
 
         // Check if the user is authenticated
         if (!currentUser) {
-            return handleError(res, "User not authenticated", 403);
+            return handleError(
+                res,
+                "User not authenticated",
+                StatusCodeEnum.FORBIDDEN,
+            );
         }
 
         const { role: currentRole } = currentUser;
         const { role: targetRole } = payload;
 
-        // Role-based creation rules
-        if (
-            currentRole === UserRoleEnum.USER ||
-            currentRole === UserRoleEnum.GUEST
-        ) {
+        // Define allowed roles for creation based on the current user's role
+        const allowedCreations: { [key: string]: string[] } = {
+            [UserRoleEnum.MANAGER]: [
+                UserRoleEnum.ADMIN,
+                UserRoleEnum.USER,
+                UserRoleEnum.GUEST,
+            ],
+            [UserRoleEnum.ADMIN]: [UserRoleEnum.USER, UserRoleEnum.GUEST],
+        };
+
+        // Get the list of roles the current user is allowed to create
+        const canCreateRoles = allowedCreations[currentRole] || [];
+
+        if (!canCreateRoles.includes(targetRole)) {
             return handleError(
                 res,
-                "You don't have permission to create users",
-                403,
+                "You don't have permission to create new user",
+                StatusCodeEnum.FORBIDDEN,
             );
-        }
-
-        if (
-            currentRole !== UserRoleEnum.ADMIN &&
-            (targetRole === UserRoleEnum.ADMIN ||
-                targetRole === UserRoleEnum.CASHIER)
-        ) {
-            if (targetRole !== "admin") {
-                return handleError(
-                    res,
-                    "You don't have permission to create users with this role",
-                    403,
-                );
-            }
         }
 
         const hashedPassword = passwordHashService(payload.password);
 
-        await db.insert(users).values({
-            ...payload,
-            password: hashedPassword,
-        });
+        const [newUser] = await db
+            .insert(users)
+            .values({
+                ...payload,
+                password: hashedPassword,
+            })
+            .returning();
 
-        res.status(200).json(null);
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { password, ...userWithoutPassword } = newUser;
+
+        res.status(StatusCodeEnum.CREATED).json(userWithoutPassword);
     } catch (error) {
         console.error(error);
         handleError(

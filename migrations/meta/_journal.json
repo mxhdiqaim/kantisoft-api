@@ -36,6 +36,34 @@
       "when": 1752856570752,
       "tag": "0004_charming_iceman",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1753102418404,
+      "tag": "0005_icy_firelord",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1753106887331,
+      "tag": "0006_high_zombie",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1753107455077,
+      "tag": "0007_overconfident_sleeper",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1753107719286,
+      "tag": "0008_blue_franklin_richards",
+      "breakpoints": true
     }
   ]
 }
