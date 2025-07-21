@@ -1,18 +1,20 @@
-import { and, eq, gte, inArray } from "drizzle-orm";
-import { sql, desc } from "drizzle-orm"; // Add this import if not present
+import { and, eq, gte, inArray, sum, count } from "drizzle-orm";
+import { sql, desc } from "drizzle-orm";
 import { lte } from "drizzle-orm/sql/expressions/conditions";
 import { Request, Response } from "express";
 import { v4 as uuidv4 } from "uuid";
 import db from "../db";
 import { menuItems } from "../schema/menu-items-schema";
 import { orderItems, orders } from "../schema/orders-schema";
-import { OrderPeriod } from "../types";
+import { users } from "../schema/users-schema";
+import { Period } from "../types";
 import {
     OrderPaymentMethodEnum,
     OrderStatusEnum,
     StatusCodeEnum,
 } from "../types/enums";
 import { handleError } from "../service/error-handling";
+import { getPeriodDates } from "../utils/get-period-dates";
 
 export const getAllOrders = async (req: Request, res: Response) => {
     try {
@@ -38,83 +40,108 @@ export const getAllOrders = async (req: Request, res: Response) => {
  * @desc    Get orders by a dynamic period (day, week, month). Defaults to 'day'.
  * @route   GET /api/orders/by-period?period=week
  */
-
 export const getOrdersByPeriod = async (req: Request, res: Response) => {
     try {
-        // Determine the period, defaulting to 'day'.
-        const period = (req.query.period as OrderPeriod) || "day";
+        const period = (req.query.period as Period) || "today";
+        const timezone = "Africa/Lagos";
 
-        if (!["day", "week", "month"].includes(period)) {
-            return res.status(400).json({
-                message: "Invalid period. Use 'day', 'week', or 'month'.",
-            });
-        }
+        const { startDate, endDate } = getPeriodDates(period, timezone);
 
-        // Calculate the start and end dates for the database query.
-        // Note: This logic uses the server's local timezone.
-        const now = new Date();
-        let startDate: Date;
-        let endDate: Date;
+        const whereClause =
+            startDate && endDate
+                ? and(
+                      gte(orders.createdAt, startDate),
+                      lte(orders.createdAt, endDate),
+                  )
+                : undefined;
 
-        const dayOfWeek = now.getDay(); // 0 = Sunday, 1 = Monday, 2 = Tuesday etc.
-
-        switch (period) {
-            case "month":
-                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-                startDate.setHours(0, 0, 0, 0);
-
-                endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0); // Last day of the current month
-                endDate.setHours(23, 59, 59, 999);
-                break;
-
-            case "week":
-                startDate = new Date(now.setDate(now.getDate() - dayOfWeek));
-                startDate.setHours(0, 0, 0, 0);
-
-                endDate = new Date(startDate);
-                endDate.setDate(startDate.getDate() + 6);
-                endDate.setHours(23, 59, 59, 999);
-                break;
-
-            case "day":
-            default:
-                startDate = new Date();
-                startDate.setHours(0, 0, 0, 0);
-
-                endDate = new Date();
-                endDate.setHours(23, 59, 59, 999);
-                break;
-        }
-
-        // 3. Query the database for orders within the calculated date range.
-        const result = await db.query.orders.findMany({
-            where: and(
-                gte(orders.createdAt, startDate),
-                lte(orders.createdAt, endDate),
-            ),
-            orderBy: (orders, { desc }) => [desc(orders.createdAt)],
-            // Fetch related order items and their menu item details for a complete response
-            with: {
-                seller: {
-                    columns: {
-                        firstName: true,
-                        lastName: true,
-                    },
-                },
-                orderItems: {
+        // Fetch all data in parallel
+        const [ordersList, salesSummary, mostOrdered, topSellerResult] =
+            await Promise.all([
+                // Get the list of orders
+                db.query.orders.findMany({
+                    where: whereClause,
+                    orderBy: (orders, { desc }) => [desc(orders.createdAt)],
                     with: {
-                        menuItem: true,
+                        seller: {
+                            columns: { firstName: true, lastName: true },
+                        },
+                        orderItems: { with: { menuItem: true } },
                     },
-                },
-            },
-        });
+                }),
+                // Get total sales and order count
+                db
+                    .select({
+                        totalRevenue: sum(orders.totalAmount),
+                        totalOrders: count(orders.id),
+                    })
+                    .from(orders)
+                    .where(whereClause),
+                // Get the most ordered item
+                db
+                    .select({
+                        name: menuItems.name,
+                        quantity: sum(orderItems.quantity),
+                    })
+                    .from(orderItems)
+                    .innerJoin(orders, eq(orderItems.orderId, orders.id))
+                    .innerJoin(
+                        menuItems,
+                        eq(orderItems.menuItemId, menuItems.id),
+                    )
+                    .where(whereClause)
+                    .groupBy(menuItems.name)
+                    .orderBy(desc(sum(orderItems.quantity)))
+                    .limit(1),
+                //  Get the top seller by revenue
+                db
+                    .select({
+                        sellerId: users.id,
+                        firstName: users.firstName,
+                        lastName: users.lastName,
+                        totalRevenue: sum(orders.totalAmount),
+                    })
+                    .from(orders)
+                    .innerJoin(users, eq(orders.sellerId, users.id))
+                    .where(whereClause)
+                    .groupBy(users.id, users.firstName, users.lastName)
+                    .orderBy(desc(sum(orders.totalAmount)))
+                    .limit(1),
+            ]);
 
-        return res.status(200).json(result);
+        const summary = salesSummary[0];
+        const mostOrderedItem = mostOrdered[0];
+        const topSeller = topSellerResult[0];
+
+        const response = {
+            period,
+            totalRevenue: parseFloat(summary.totalRevenue || "0").toFixed(2),
+            totalOrders: summary.totalOrders || 0,
+            mostOrderedItem: mostOrderedItem
+                ? {
+                      name: mostOrderedItem.name,
+                      quantity: parseInt(mostOrderedItem.quantity || "0"),
+                  }
+                : null,
+            topSeller: topSeller
+                ? {
+                      name: `${topSeller.firstName} ${topSeller.lastName}`,
+                      totalRevenue: parseFloat(
+                          topSeller.totalRevenue || "0",
+                      ).toFixed(2),
+                  }
+                : null,
+            orders: ordersList,
+        };
+
+        return res.status(200).json(response);
     } catch (error) {
         console.error(error);
-        res.status(500).json({
-            message: "Problem loading today's orders, please try again.",
-        });
+        return handleError(
+            res,
+            "Problem loading orders for the specified period, please try again.",
+            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+        );
     }
 };
 

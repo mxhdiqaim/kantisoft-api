@@ -32,6 +32,9 @@ importers:
       jsonwebtoken:
         specifier: ^9.0.2
         version: 9.0.2
+      moment-timezone:
+        specifier: ^0.6.0
+        version: 0.6.0
       morgan:
         specifier: ^1.10.0
         version: 1.10.0
@@ -1265,6 +1268,12 @@ packages:
   minimatch@9.0.5:
     resolution: {integrity: sha512-G6T0ZX48xgozx7587koeX9Ys2NYy6Gmv//P89sEte9V9whIapMNF4idKxnW2QtCcLiTWlb/wfCabAtAFWhhBow==}
     engines: {node: '>=16 || 14 >=14.17'}
+
+  moment-timezone@0.6.0:
+    resolution: {integrity: sha512-ldA5lRNm3iJCWZcBCab4pnNL3HSZYXVb/3TYr75/1WCTWYuTqYUb5f/S384pncYjJ88lbO8Z4uPDvmoluHJc8Q==}
+
+  moment@2.30.1:
+    resolution: {integrity: sha512-uEmtNhbDOrWPFS+hdjFCBfy9f2YoyzRpwcl+DqpC6taX21FzsTLQVbMV/W7PzNSX6x/bhC1zA3c2UQ5NzH6how==}
 
   morgan@1.10.0:
     resolution: {integrity: sha512-AbegBVI4sh6El+1gNwvD5YIck7nSA36weD7xvIxG4in80j/UoK8AEGaWnnz8v1GxonMCltmlNs5ZKbGvl9b1XQ==}
@@ -2744,6 +2753,12 @@ snapshots:
   minimatch@9.0.5:
     dependencies:
       brace-expansion: 2.0.2
+
+  moment-timezone@0.6.0:
+    dependencies:
+      moment: 2.30.1
+
+  moment@2.30.1: {}
 
   morgan@1.10.0:
     dependencies:
