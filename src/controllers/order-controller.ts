@@ -1,8 +1,7 @@
-import { and, eq, gte, inArray, sum, count } from "drizzle-orm";
+import { and, eq, gte, inArray, sum, count, isNull } from "drizzle-orm";
 import { sql, desc } from "drizzle-orm";
 import { lte } from "drizzle-orm/sql/expressions/conditions";
 import { Request, Response } from "express";
-import { v4 as uuidv4 } from "uuid";
 import db from "../db";
 import { menuItems } from "../schema/menu-items-schema";
 import { orderItems, orders } from "../schema/orders-schema";
@@ -15,6 +14,7 @@ import {
 } from "../types/enums";
 import { handleError } from "../service/error-handling";
 import { getPeriodDates } from "../utils/get-period-dates";
+import { generateOrderReference } from "../utils";
 
 export const getAllOrders = async (req: Request, res: Response) => {
     try {
@@ -42,6 +42,30 @@ export const getAllOrders = async (req: Request, res: Response) => {
  */
 export const getOrdersByPeriod = async (req: Request, res: Response) => {
     try {
+        // --- Start of new logic: Find and update orders without a reference ---
+        const ordersWithoutReference = await db
+            .select({ id: orders.id })
+            .from(orders)
+            .where(isNull(orders.reference));
+
+        if (ordersWithoutReference.length > 0) {
+            console.log(
+                `Found ${ordersWithoutReference.length} orders without a reference. Updating...`,
+            );
+            // Create an array of update promises
+            const updatePromises = ordersWithoutReference.map((order) =>
+                db
+                    .update(orders)
+                    .set({ reference: generateOrderReference() })
+                    .where(eq(orders.id, order.id)),
+            );
+            // Execute all updates in parallel
+            await Promise.all(updatePromises);
+            console.log("Finished updating orders with new references.");
+        }
+
+        // --- End of new logic ---
+
         const period = (req.query.period as Period) || "today";
         const timezone = "Africa/Lagos";
 
@@ -266,11 +290,12 @@ export const createOrder = async (req: Request, res: Response) => {
 
         // 3. Create the order and the order items within a transaction
         const newOrder = await db.transaction(async (tx) => {
-            const newOrderId = uuidv4();
+            const orderReference = generateOrderReference();
 
             const [insertedOrder] = await tx
                 .insert(orders)
                 .values({
+                    reference: orderReference,
                     totalAmount,
                     paymentMethod,
                     orderStatus,
@@ -288,7 +313,7 @@ export const createOrder = async (req: Request, res: Response) => {
 
             // 4. Fetch and return the complete order data
             return await tx.query.orders.findFirst({
-                where: eq(orders.id, newOrderId),
+                where: eq(orders.id, insertedOrder.id),
                 with: {
                     orderItems: {
                         with: {
@@ -299,6 +324,11 @@ export const createOrder = async (req: Request, res: Response) => {
                         columns: {
                             firstName: true,
                             lastName: true,
+                        },
+                    },
+                    store: {
+                        columns: {
+                            name: true,
                         },
                     },
                 },
@@ -408,5 +438,49 @@ export const getMostOrderedItem = async (req: Request, res: Response) => {
         res.status(500).json({
             message: "Problem fetching most ordered item, please try again.",
         });
+    }
+};
+
+/**
+ * @desc    Get a single order by its reference
+ * @route   GET /api/orders/reference/:reference
+ * @access  Private
+ */
+export const getOrderByReference = async (req: Request, res: Response) => {
+    try {
+        const { reference } = req.params;
+
+        const order = await db.query.orders.findFirst({
+            where: eq(orders.reference, reference),
+            with: {
+                seller: {
+                    columns: {
+                        firstName: true,
+                        lastName: true,
+                    },
+                },
+                orderItems: {
+                    with: {
+                        menuItem: true,
+                    },
+                },
+            },
+        });
+
+        if (!order) {
+            return handleError(
+                res,
+                "The order is not found",
+                StatusCodeEnum.NOT_FOUND,
+            );
+        }
+        res.status(StatusCodeEnum.OK).json(order);
+    } catch (error) {
+        console.error(error);
+        return handleError(
+            res,
+            "Problem loading order, please try again.",
+            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+        );
     }
 };

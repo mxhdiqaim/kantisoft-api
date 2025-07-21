@@ -5,6 +5,7 @@ import {
     pgTable,
     timestamp,
     uuid,
+    text,
 } from "drizzle-orm/pg-core";
 import { menuItems } from "./menu-items-schema";
 import { users } from "./users-schema";
@@ -24,6 +25,8 @@ export const orderPaymentMethodEnum = pgEnum("paymentMethod", [
 
 export const orders = pgTable("orders", {
     id: uuid("id").defaultRandom().primaryKey(),
+    reference: text("reference").unique(), // Human-readable order reference
+    // reference: text("reference").unique().notNull(), // Human-readable order reference
     totalAmount: doublePrecision("totalAmount").notNull(), // Total for the entire order
     paymentMethod: orderPaymentMethodEnum("paymentMethod")
         .notNull()
