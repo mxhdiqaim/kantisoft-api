@@ -9,17 +9,15 @@ import { handleError } from "../service/error-handling";
 import { passwordHashService } from "../service/password-hash-service";
 import { StatusCodeEnum, UserRoleEnum, UserStatusEnum } from "../types/enums";
 
+/**
+ * @desc    Get all users (Admin only)
+ * @route   GET /api/users
+ * @access  Private/Admin
+ */
 export const getAllUsers = async (req: Request, res: Response) => {
     try {
-        const { query } = req;
-        const user = req.user?.data;
-        const isAdmin = user?.role === UserRoleEnum.ADMIN;
-
-        // quick solution
-        // in the future, we need to handle all filter/sort operators on any field
-        const hasRole = "role" in query;
-
-        const data = await db
+        // Fetch all users, excluding the password field for security
+        const allUsers = await db
             .select({
                 id: users.id,
                 firstName: users.firstName,
@@ -31,24 +29,14 @@ export const getAllUsers = async (req: Request, res: Response) => {
                 createdAt: users.createdAt,
                 lastModified: users.lastModified,
             })
-            .from(users)
-            .where(
-                and(
-                    hasRole
-                        ? eq(users.role, query.role as UserRoleEnum)
-                        : undefined,
-                    !isAdmin
-                        ? ne(users.status, UserStatusEnum.DELETED)
-                        : undefined,
-                ),
-            );
+            .from(users);
 
-        res.status(200).json(data);
+        res.status(200).json(allUsers);
     } catch (error) {
-        console.error(error);
-        handleError(
+        console.error("Error fetching all users:", error);
+        return handleError(
             res,
-            "Problem loading users, please try again",
+            "Failed to fetch users.",
             StatusCodeEnum.INTERNAL_SERVER_ERROR,
         );
     }

@@ -1,16 +1,16 @@
-import bcrypt from 'bcrypt';
-import { eq } from 'drizzle-orm';
-import passport from 'passport';
-import { Strategy as LocalStrategy } from 'passport-local';
-import db from '../db';
+import bcrypt from "bcrypt";
+import { eq } from "drizzle-orm";
+import passport from "passport";
+import { Strategy as LocalStrategy } from "passport-local";
+import db from "../db";
 
-import { users, UserSchemaT } from '../schema/users-schema';
+import { users, UserSchemaT } from "../schema/users-schema";
 
 type UserT = {
-    id: UserSchemaT['id'];
+    id: UserSchemaT["id"];
 };
 
-type AuthUserT = {
+export type AuthUserT = {
     data: UserSchemaT;
 };
 
@@ -48,7 +48,7 @@ passport.deserializeUser(async (user: UserT, done) => {
         const data = await fetchUserData();
 
         if (!data) {
-            return done(new Error('Wrong email or password'));
+            return done(new Error("Wrong email or password"));
         }
 
         return done(null, { data });
@@ -58,9 +58,9 @@ passport.deserializeUser(async (user: UserT, done) => {
 });
 
 passport.use(
-    'user',
+    "user",
     new LocalStrategy(
-        { usernameField: 'email', passReqToCallback: true },
+        { usernameField: "email", passReqToCallback: true },
         async (req, email, password, done) => {
             try {
                 const userData = await db.query.users.findFirst({
@@ -69,7 +69,7 @@ passport.use(
 
                 if (!userData) {
                     return done(null, false, {
-                        message: 'Wrong email or password',
+                        message: "Wrong email or password",
                     });
                 }
 
@@ -79,7 +79,7 @@ passport.use(
                 );
                 if (!isMatch) {
                     return done(null, false, {
-                        message: 'Wrong email or password',
+                        message: "Wrong email or password",
                     });
                 }
 
