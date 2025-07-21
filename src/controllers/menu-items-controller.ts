@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { desc, eq, isNull } from "drizzle-orm";
 import { Request, Response } from "express";
 import db from "../db";
 import { menuItems } from "../schema/menu-items-schema";
@@ -9,8 +9,49 @@ import { StatusCodeEnum } from "../types/enums";
 // Get all menu items
 export const getAllMenuItems = async (req: Request, res: Response) => {
     try {
-        const allMenuItems = await db.select().from(menuItems);
-        res.status(200).json(allMenuItems);
+        // --- Start of data reconciliation logic ---
+        // Find a default store to assign to items without one.
+        const defaultStore = await db.query.stores.findFirst();
+
+        if (defaultStore) {
+            // Find all menu items that don't have a storeId
+            const itemsWithoutStore = await db
+                .select({ id: menuItems.id })
+                .from(menuItems)
+                .where(isNull(menuItems.storeId));
+
+            if (itemsWithoutStore.length > 0) {
+                console.log(
+                    `Found ${itemsWithoutStore.length} menu items without a store. Updating...`,
+                );
+                // Create an array of update promises
+                const updatePromises = itemsWithoutStore.map((item) =>
+                    db
+                        .update(menuItems)
+                        .set({ storeId: defaultStore.id })
+                        .where(eq(menuItems.id, item.id)),
+                );
+                // Execute all updates in parallel
+                await Promise.all(updatePromises);
+                console.log(
+                    "Finished updating menu items with a default storeId.",
+                );
+            }
+        }
+        // --- End of data reconciliation logic ---
+
+        // Allow filtering by storeId via query parameter
+        const storeId = req.query.storeId as string | undefined;
+        const whereClause = storeId
+            ? eq(menuItems.storeId, storeId)
+            : undefined;
+
+        const allMenuItems = await db.query.menuItems.findMany({
+            where: whereClause,
+            orderBy: [desc(menuItems.createdAt)],
+        });
+
+        res.status(StatusCodeEnum.OK).json(allMenuItems);
     } catch (error) {
         console.error(error);
         handleError(res, "Problem loading menu items, please try again", 500);
