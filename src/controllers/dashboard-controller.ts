@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Request, Response } from "express";
 import db from "../db";
 import { sql, sum, count, desc, gte, lt, and, eq, min, max } from "drizzle-orm";
@@ -19,6 +20,7 @@ import moment from "moment-timezone";
 export const getSalesSummary = async (req: Request, res: Response) => {
     const period = (req.query.period as Period) || "today";
     const timezone = "Africa/Lagos";
+    const userStoreId = (req as any).userStoreId; // Get storeId from middleware
 
     try {
         const { startDate, endDate } = getPeriodDates(
@@ -26,13 +28,20 @@ export const getSalesSummary = async (req: Request, res: Response) => {
             timezone,
         );
 
-        const whereClause =
+        let whereClause =
             startDate && endDate
                 ? and(
                       gte(orders.orderDate, startDate),
                       lt(orders.orderDate, endDate),
                   )
                 : undefined;
+        // If the user is an Admin, add their storeId to the where clause
+        if (userStoreId) {
+            const storeCondition = eq(orders.storeId, userStoreId);
+            whereClause = whereClause
+                ? and(whereClause, storeCondition)
+                : storeCondition;
+        }
 
         const result = await db
             .select({
@@ -79,7 +88,8 @@ export const getTopSells = async (req: Request, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 5;
     const orderBy = (req.query.orderBy as OrderBy) || "quantity"; // 'quantity' or 'revenue'
     const period = (req.query.period as Period) || "month";
-    const timezone = (req.query.timezone as string) || "Africa/Lagos";
+    const timezone = "Africa/Lagos";
+    const userStoreId = (req as any).userStoreId; // Get storeId from middleware
 
     try {
         const { startDate, endDate } = getPeriodDates(
@@ -87,13 +97,21 @@ export const getTopSells = async (req: Request, res: Response) => {
             timezone,
         );
 
-        const whereClause =
+        let whereClause =
             startDate && endDate
                 ? and(
                       gte(orders.orderDate, startDate),
                       lt(orders.orderDate, endDate),
                   )
                 : undefined;
+
+        // If the user is an Admin, add their storeId to the where clause
+        if (userStoreId) {
+            const storeCondition = eq(orders.storeId, userStoreId);
+            whereClause = whereClause
+                ? and(whereClause, storeCondition)
+                : storeCondition;
+        }
 
         const topItemsQuery = db
             .select({
@@ -158,6 +176,11 @@ export const getTopSells = async (req: Request, res: Response) => {
  */
 export const getInventorySummary = async (req: Request, res: Response) => {
     try {
+        const userStoreId = (req as any).userStoreId; // Get storeId from middleware
+        const whereClause = userStoreId
+            ? eq(menuItems.storeId, userStoreId)
+            : undefined;
+
         const lowStockItems = await db
             .select({
                 id: menuItems.id,
@@ -167,7 +190,7 @@ export const getInventorySummary = async (req: Request, res: Response) => {
                 //   minStockLevel: products.minStockLevel,
             })
             .from(menuItems)
-            .where(sql`${!menuItems.isAvailable}`);
+            .where(and(whereClause, sql`${!menuItems.isAvailable}`));
 
         const outOfStockItems = await db
             .select({
@@ -175,7 +198,7 @@ export const getInventorySummary = async (req: Request, res: Response) => {
                 name: menuItems.name,
             })
             .from(menuItems)
-            .where(eq(menuItems.isAvailable, false));
+            .where(and(whereClause, eq(menuItems.isAvailable, false)));
 
         res.status(200).json({
             totalLowStockItems: lowStockItems.length,
@@ -203,6 +226,7 @@ export const getInventorySummary = async (req: Request, res: Response) => {
 export const getSalesTrend = async (req: Request, res: Response) => {
     const period = (req.query.period as Period) || "week"; // 'week' or 'month'
     const timezone = "Africa/Lagos";
+    const userStoreId = (req as any).userStoreId; // Get storeId from middleware
 
     try {
         // Handle 'all-time' period by grouping by month
@@ -214,6 +238,9 @@ export const getSalesTrend = async (req: Request, res: Response) => {
                     monthlyOrders: count(orders.id),
                 })
                 .from(orders)
+                .where(
+                    userStoreId ? eq(orders.storeId, userStoreId) : undefined,
+                ) // Scope the query
                 .groupBy(sql`TO_CHAR(${orders.orderDate}, 'YYYY-MM')`)
                 .orderBy(sql`TO_CHAR(${orders.orderDate}, 'YYYY-MM')`);
 
@@ -222,7 +249,10 @@ export const getSalesTrend = async (req: Request, res: Response) => {
                     minDate: min(orders.orderDate),
                     maxDate: max(orders.orderDate),
                 })
-                .from(orders);
+                .from(orders)
+                .where(
+                    userStoreId ? eq(orders.storeId, userStoreId) : undefined,
+                ); // Scope the query
 
             const firstOrderDate = dateRange[0].minDate;
             const lastOrderDate = dateRange[0].maxDate;
@@ -270,6 +300,17 @@ export const getSalesTrend = async (req: Request, res: Response) => {
                 StatusCodeEnum.BAD_REQUEST,
             );
         }
+        const baseWhere =
+            startDate && endDate
+                ? and(
+                      gte(orders.orderDate, startDate),
+                      lt(orders.orderDate, endDate),
+                  )
+                : undefined;
+
+        const whereClause = userStoreId
+            ? and(baseWhere, eq(orders.storeId, userStoreId))
+            : baseWhere;
 
         // Group by day using PostgreSQL's TO_CHAR for formatting date
         const salesTrend = await db
@@ -279,12 +320,7 @@ export const getSalesTrend = async (req: Request, res: Response) => {
                 dailyOrders: count(orders.id).as("dailyOrders"),
             })
             .from(orders)
-            .where(
-                and(
-                    gte(orders.orderDate, startDate),
-                    lt(orders.orderDate, endDate),
-                ),
-            )
+            .where(whereClause)
             .groupBy(sql`TO_CHAR(${orders.orderDate}, 'YYYY-MM-DD')`)
             .orderBy(sql`date`);
 

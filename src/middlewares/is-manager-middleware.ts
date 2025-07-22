@@ -13,18 +13,14 @@ export const isManager = (
     res: Response,
     next: NextFunction,
 ) => {
-    // Admins should also have access to manager routes
-    if (
-        req.user &&
-        (req.user.data.role === UserRoleEnum.MANAGER ||
-            req.user.data.role === UserRoleEnum.ADMIN)
-    ) {
+    // Only users with the 'manager' role should have system-wide access
+    if (req.user && req.user.data.role === UserRoleEnum.MANAGER) {
         return next();
     }
 
     return handleError(
         res,
-        "Access denied. Manager or Admin role required.",
+        "Access denied. System Manager role required",
         StatusCodeEnum.FORBIDDEN,
     );
 };

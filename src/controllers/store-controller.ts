@@ -7,7 +7,15 @@ import { StatusCodeEnum } from "../types/enums";
 
 export const getAllStores = async (req: Request, res: Response) => {
     try {
-        const allStores = await db.select().from(stores);
+        // const allStores = await db.select().from(stores);
+        // Using db.query allows us to fetch relations easily
+        const allStores = await db.query.stores.findMany({
+            // Optionally, you could filter for only top-level stores (not branches)
+            // where: isNull(stores.parentId),
+            with: {
+                branches: true, // Include all child stores (branches)
+            },
+        });
         res.status(StatusCodeEnum.OK).json(allStores);
     } catch (error) {
         console.log("error", error);
@@ -22,7 +30,14 @@ export const getAllStores = async (req: Request, res: Response) => {
 export const getStoreById = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const [store] = await db.select().from(stores).where(eq(stores.id, id));
+        // const [store] = await db.select().from(stores).where(eq(stores.id, id));
+        const store = await db.query.stores.findFirst({
+            where: eq(stores.id, id),
+            with: {
+                parent: true, // Include the parent store, if it exists
+                branches: true, // Include all child stores (branches)
+            },
+        });
         if (!store) {
             return handleError(
                 res,
@@ -43,10 +58,10 @@ export const getStoreById = async (req: Request, res: Response) => {
 
 export const createStore = async (req: Request, res: Response) => {
     try {
-        const { name, location, storeType } = req.body;
+        const { name, location, storeType, storeParentId } = req.body;
         const [newStore] = await db
             .insert(stores)
-            .values({ name, location, storeType })
+            .values({ name, location, storeType, storeParentId })
             .returning();
         res.status(StatusCodeEnum.CREATED).json(newStore);
     } catch (error) {
@@ -62,10 +77,10 @@ export const createStore = async (req: Request, res: Response) => {
 export const updateStore = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const { name, location, storeType } = req.body;
+        const { name, location, storeType, storeParentId } = req.body;
         const [updatedStore] = await db
             .update(stores)
-            .set({ name, location, storeType })
+            .set({ name, location, storeType, storeParentId })
             .where(eq(stores.id, id))
             .returning();
         if (!updatedStore) {

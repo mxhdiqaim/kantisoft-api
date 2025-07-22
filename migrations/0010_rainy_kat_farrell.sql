@@ -1,0 +1,2 @@
+ALTER TABLE "stores" ADD COLUMN "storeParentId" uuid;--> statement-breakpoint
+ALTER TABLE "stores" ADD CONSTRAINT "stores_storeParentId_stores_id_fk" FOREIGN KEY ("storeParentId") REFERENCES "public"."stores"("id") ON DELETE set null ON UPDATE no action;

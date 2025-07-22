@@ -1,54 +1,25 @@
-import { desc, eq, isNull } from "drizzle-orm";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { and, desc, eq } from "drizzle-orm";
 import { Request, Response } from "express";
 import db from "../db";
 import { menuItems } from "../schema/menu-items-schema";
 import { generateUniqueItemCode } from "../utils/generate-unique-item-code";
 import { handleError } from "../service/error-handling";
-import { StatusCodeEnum } from "../types/enums";
+import { StatusCodeEnum, UserRoleEnum } from "../types/enums";
 
 // Get all menu items
 export const getAllMenuItems = async (req: Request, res: Response) => {
     try {
-        // --- Start of data reconciliation logic ---
-        // Find a default store to assign to items without one.
-        const defaultStore = await db.query.stores.findFirst();
-
-        if (defaultStore) {
-            // Find all menu items that don't have a storeId
-            const itemsWithoutStore = await db
-                .select({ id: menuItems.id })
-                .from(menuItems)
-                .where(isNull(menuItems.storeId));
-
-            if (itemsWithoutStore.length > 0) {
-                console.log(
-                    `Found ${itemsWithoutStore.length} menu items without a store. Updating...`,
-                );
-                // Create an array of update promises
-                const updatePromises = itemsWithoutStore.map((item) =>
-                    db
-                        .update(menuItems)
-                        .set({ storeId: defaultStore.id })
-                        .where(eq(menuItems.id, item.id)),
-                );
-                // Execute all updates in parallel
-                await Promise.all(updatePromises);
-                console.log(
-                    "Finished updating menu items with a default storeId.",
-                );
-            }
-        }
-        // --- End of data reconciliation logic ---
-
-        // Allow filtering by storeId via query parameter
-        const storeId = req.query.storeId as string | undefined;
-        const whereClause = storeId
-            ? eq(menuItems.storeId, storeId)
+        const userStoreId = (req as any).userStoreId; // Get storeId from middleware
+        // If userStoreId exists, all queries are scoped to that store.
+        const whereClause = userStoreId
+            ? eq(menuItems.storeId, userStoreId)
             : undefined;
 
         const allMenuItems = await db.query.menuItems.findMany({
             where: whereClause,
             orderBy: [desc(menuItems.createdAt)],
+            with: { store: { columns: { name: true } } },
         });
 
         res.status(StatusCodeEnum.OK).json(allMenuItems);
@@ -62,19 +33,43 @@ export const getAllMenuItems = async (req: Request, res: Response) => {
 export const getMenuItemById = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const menuItem = await db
-            .select()
-            .from(menuItems)
-            .where(eq(menuItems.id, id));
-        if (menuItem.length === 0) {
-            return res.status(404).json({ message: "Menu item not found" });
+        const userStoreId = (req as any).userStoreId;
+        const isManager = req.user?.data.role === UserRoleEnum.MANAGER;
+
+        let whereClause: any = eq(menuItems.id, id);
+
+        if (!isManager && userStoreId) {
+            whereClause = and(whereClause, eq(menuItems.storeId, userStoreId));
         }
-        res.status(200).json(menuItem[0]);
+
+        const menuItem = await db.query.menuItems.findFirst({
+            where: whereClause,
+        });
+
+        if (!menuItem) {
+            return handleError(
+                res,
+                "Menu item not found",
+                StatusCodeEnum.NOT_FOUND,
+            );
+        }
+        res.status(StatusCodeEnum.OK).json(menuItem);
+
+        // const menuItem = await db
+        //     .select()
+        //     .from(menuItems)
+        //     .where(eq(menuItems.id, id));
+        // if (menuItem.length === 0) {
+        //     return res.status(404).json({ message: "Menu item not found" });
+        // }
+        // res.status(200).json(menuItem[0]);
     } catch (error) {
         console.error(error);
-        res.status(500).json({
-            message: "Problem loading menu item, please try again.",
-        });
+        return handleError(
+            res,
+            "Problem loading menu item, please try again",
+            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+        );
     }
 };
 
@@ -88,7 +83,17 @@ export const createMenuItem = async (req: Request, res: Response) => {
         storeId,
     } = req.body;
 
+    const user = req.user?.data;
+
     try {
+        // Security check: Admins can only create items for their own store
+        if (user?.role === UserRoleEnum.ADMIN && storeId !== user.storeId) {
+            return handleError(
+                res,
+                "You can only create menu items for your assigned store.",
+                StatusCodeEnum.FORBIDDEN,
+            );
+        }
         const existingItemByName = await db
             .select()
             .from(menuItems)
@@ -155,10 +160,20 @@ export const updateMenuItem = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
         const { name, price, isAvailable, itemCode } = req.body;
+        const userStoreId = (req as any).userStoreId;
+        const isManager = req.user?.data.role === UserRoleEnum.MANAGER;
+
+        let findWhereClause: any = eq(menuItems.id, id);
+        if (!isManager && userStoreId) {
+            findWhereClause = and(
+                findWhereClause,
+                eq(menuItems.storeId, userStoreId),
+            );
+        }
 
         // First, get the current state of the menu item
         const currentItem = await db.query.menuItems.findFirst({
-            where: eq(menuItems.id, id),
+            where: findWhereClause,
         });
 
         if (!currentItem) {
@@ -194,15 +209,12 @@ export const updateMenuItem = async (req: Request, res: Response) => {
                 "No fields to update provided.",
                 StatusCodeEnum.BAD_REQUEST,
             );
-            // return res
-            //     .status(400)
-            //     .json({ message: "No fields to update provided." });
         }
 
         const updatedItem = await db
             .update(menuItems)
             .set(updateData)
-            .where(eq(menuItems.id, id))
+            .where(findWhereClause)
             .returning();
 
         if (updatedItem.length === 0) {
@@ -212,7 +224,7 @@ export const updateMenuItem = async (req: Request, res: Response) => {
                 StatusCodeEnum.NOT_FOUND,
             );
         }
-        res.status(200).json(updatedItem[0]);
+        res.status(StatusCodeEnum.OK).json(updatedItem[0]);
     } catch (error) {
         // Handle potential unique constraint errors, e.g., if the new name is already taken
         console.error(error);
@@ -228,18 +240,32 @@ export const updateMenuItem = async (req: Request, res: Response) => {
 export const deleteMenuItem = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
+        const userStoreId = (req as any).userStoreId;
+        const isManager = req.user?.data.role === UserRoleEnum.MANAGER;
+
+        let whereClause: any = eq(menuItems.id, id);
+        if (!isManager && userStoreId) {
+            whereClause = and(whereClause, eq(menuItems.storeId, userStoreId));
+        }
+
         const deletedItem = await db
             .delete(menuItems)
-            .where(eq(menuItems.id, id))
+            .where(whereClause)
             .returning();
         if (deletedItem.length === 0) {
-            return res.status(404).json({ message: "Menu item not found" });
+            return res
+                .status(StatusCodeEnum.NOT_FOUND)
+                .json({ message: "Menu item not found" });
         }
-        res.status(200).json({ message: "Menu item deleted successfully" });
+        res.status(StatusCodeEnum.OK).json({
+            message: "Menu item deleted successfully",
+        });
     } catch (error) {
         console.error(error);
-        res.status(500).json({
-            message: "Problem deleting menu items, please try again.",
-        });
+        return handleError(
+            res,
+            "Problem deleting menu items, please try again.",
+            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+        );
     }
 };

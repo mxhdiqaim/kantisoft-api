@@ -1,4 +1,5 @@
-import { and, eq, gte, inArray, sum, count, isNull } from "drizzle-orm";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { and, eq, gte, inArray, sum, count } from "drizzle-orm";
 import { sql, desc } from "drizzle-orm";
 import { lte } from "drizzle-orm/sql/expressions/conditions";
 import { Request, Response } from "express";
@@ -11,15 +12,26 @@ import {
     OrderPaymentMethodEnum,
     OrderStatusEnum,
     StatusCodeEnum,
+    UserRoleEnum,
 } from "../types/enums";
 import { handleError } from "../service/error-handling";
 import { getPeriodDates } from "../utils/get-period-dates";
 import { generateOrderReference } from "../utils";
+import { logActivity } from "../service/activity-logger";
 
 export const getAllOrders = async (req: Request, res: Response) => {
     try {
+        const userStoreId = (req as any).userStoreId;
+        const whereClause = userStoreId
+            ? eq(orders.storeId, userStoreId)
+            : undefined;
+
         const allOrders = await db.query.orders.findMany({
+            where: whereClause,
+            orderBy: [desc(orders.createdAt)],
             with: {
+                store: { columns: { name: true } },
+                seller: { columns: { firstName: true, lastName: true } },
                 orderItems: {
                     with: {
                         menuItem: true,
@@ -27,12 +39,14 @@ export const getAllOrders = async (req: Request, res: Response) => {
                 },
             },
         });
-        res.status(200).json(allOrders);
+        res.status(StatusCodeEnum.OK).json(allOrders);
     } catch (error) {
         console.error(error);
-        res.status(500).json({
-            message: "Problem loading orders, please try again.",
-        });
+        handleError(
+            res,
+            "Problem loading orders, please try again.",
+            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+        );
     }
 };
 
@@ -42,42 +56,27 @@ export const getAllOrders = async (req: Request, res: Response) => {
  */
 export const getOrdersByPeriod = async (req: Request, res: Response) => {
     try {
-        // --- Start of new logic: Find and update orders without a reference ---
-        const ordersWithoutReference = await db
-            .select({ id: orders.id })
-            .from(orders)
-            .where(isNull(orders.reference));
-
-        if (ordersWithoutReference.length > 0) {
-            console.log(
-                `Found ${ordersWithoutReference.length} orders without a reference. Updating...`,
-            );
-            // Create an array of update promises
-            const updatePromises = ordersWithoutReference.map((order) =>
-                db
-                    .update(orders)
-                    .set({ reference: generateOrderReference() })
-                    .where(eq(orders.id, order.id)),
-            );
-            // Execute all updates in parallel
-            await Promise.all(updatePromises);
-            console.log("Finished updating orders with new references.");
-        }
-
-        // --- End of new logic ---
-
         const period = (req.query.period as Period) || "today";
         const timezone = "Africa/Lagos";
+        const userStoreId = (req as any).userStoreId; // Get storeId from middleware
 
         const { startDate, endDate } = getPeriodDates(period, timezone);
 
-        const whereClause =
+        let whereClause =
             startDate && endDate
                 ? and(
                       gte(orders.createdAt, startDate),
                       lte(orders.createdAt, endDate),
                   )
                 : undefined;
+
+        // If the user is an Admin, add their storeId to the where clause
+        if (userStoreId) {
+            const storeCondition = eq(orders.storeId, userStoreId);
+            whereClause = whereClause
+                ? and(whereClause, storeCondition)
+                : storeCondition;
+        }
 
         // Fetch all data in parallel
         const [ordersList, salesSummary, mostOrdered, topSellerResult] =
@@ -172,11 +171,17 @@ export const getOrdersByPeriod = async (req: Request, res: Response) => {
 export const getOrderById = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
+        const userStoreId = (req as any).userStoreId;
+        const isManager = req.user?.data.role === UserRoleEnum.MANAGER;
 
-        console.log("id", id);
+        let whereClause: any = eq(orders.id, id);
+
+        if (!isManager && userStoreId) {
+            whereClause = and(whereClause, eq(orders.storeId, userStoreId));
+        }
 
         const order = await db.query.orders.findFirst({
-            where: eq(orders.id, id),
+            where: whereClause,
             with: {
                 seller: {
                     columns: {
@@ -193,14 +198,20 @@ export const getOrderById = async (req: Request, res: Response) => {
         });
 
         if (!order) {
-            return res.status(404).json({ message: "The order is not found" });
+            return handleError(
+                res,
+                "The order is not found",
+                StatusCodeEnum.NOT_FOUND,
+            );
         }
-        res.status(200).json(order);
+        res.status(StatusCodeEnum.OK).json(order);
     } catch (error) {
         console.error(error);
-        res.status(500).json({
-            message: "Problem loading order, please try again.",
-        });
+        return handleError(
+            res,
+            "Problem loading order, please try again.",
+            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+        );
     }
 };
 
@@ -223,6 +234,17 @@ export const createOrder = async (req: Request, res: Response) => {
             paymentMethod = "cash" as OrderPaymentMethodEnum,
             orderStatus = "completed" as OrderStatusEnum,
         } = req.body;
+
+        const user = req.user?.data;
+
+        // Security check: Admins can only create orders for their own store
+        if (user?.role === UserRoleEnum.ADMIN && storeId !== user.storeId) {
+            return handleError(
+                res,
+                "You can only create orders for your assigned store.",
+                StatusCodeEnum.FORBIDDEN,
+            );
+        }
 
         if (!items || !Array.isArray(items) || items.length === 0) {
             return handleError(
@@ -300,9 +322,19 @@ export const createOrder = async (req: Request, res: Response) => {
                     paymentMethod,
                     orderStatus,
                     sellerId,
-                    storeId, // <-- Pass storeId to the insert
+                    storeId,
                 })
-                .returning({ id: orders.id });
+                .returning({ reference: orders.reference, id: orders.id });
+
+            // Log this activity after the transaction is successful
+            await logActivity({
+                userId: sellerId,
+                storeId: storeId,
+                action: "ORDER_CREATED",
+                entityId: insertedOrder.id,
+                entityType: "order",
+                details: `User created a new order with reference ${insertedOrder.reference}.`,
+            });
 
             // Insert into the 'orderItems' table
             const newOrderItemsData = orderItemsToInsert.map((item) => ({
@@ -355,29 +387,50 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
         const { orderStatus } = req.body; // e.g. 'pending', 'completed', 'cancelled'
+        const userStoreId = (req as any).userStoreId;
+        const isManager = req.user?.data.role === UserRoleEnum.MANAGER;
 
         if (!orderStatus) {
-            return res
-                .status(400)
-                .json({ message: "Order status is required." });
+            return handleError(
+                res,
+                "Order status is required.",
+                StatusCodeEnum.BAD_REQUEST,
+            );
         }
+
+        let whereClause: any = eq(orders.id, id);
+        if (!isManager && userStoreId) {
+            whereClause = and(whereClause, eq(orders.storeId, userStoreId));
+        }
+
+        // Add the condition that the order must be 'pending' to be updated
+        const finalWhereClause = and(
+            whereClause,
+            eq(orders.orderStatus, OrderStatusEnum.PENDING),
+        );
 
         const updatedOrder = await db
             .update(orders)
             .set({ orderStatus })
-            .where(eq(orders.id, id))
+            .where(finalWhereClause)
             .returning();
 
         if (updatedOrder.length === 0) {
-            return res.status(404).json({ message: "The order is not found" });
+            return handleError(
+                res,
+                "The order is not found or or it cannot be updated because it is completed or cancelled.",
+                StatusCodeEnum.NOT_FOUND,
+            );
         }
 
-        res.status(200).json(updatedOrder[0]);
+        res.status(StatusCodeEnum.OK).json(updatedOrder[0]);
     } catch (error) {
         console.error(error);
-        res.status(500).json({
-            message: "Problem updating order, please try again.",
-        });
+        handleError(
+            res,
+            "Problem updating order, please try again.",
+            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+        );
     }
 };
 
@@ -385,27 +438,54 @@ export const updateOrderStatus = async (req: Request, res: Response) => {
 export const deleteOrder = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
+        const userStoreId = (req as any).userStoreId;
+        const isManager = req.user?.data.role === UserRoleEnum.MANAGER;
+
+        let whereClause: any = eq(orders.id, id);
+        if (!isManager && userStoreId) {
+            whereClause = and(whereClause, eq(orders.storeId, userStoreId));
+        }
+
+        // Add the condition that the order must be 'pending' to be deleted
+        const finalWhereClause = and(
+            whereClause,
+            eq(orders.orderStatus, OrderStatusEnum.PENDING),
+        );
+
         // The 'onDelete: cascade' in the schema will automatically delete related orderItems.
         const deletedOrder = await db
             .delete(orders)
-            .where(eq(orders.id, id))
+            .where(finalWhereClause)
             .returning();
 
         if (deletedOrder.length === 0) {
-            return res.status(404).json({ message: "The order is not found" });
+            return handleError(
+                res,
+                "The order is not found or it cannot be deleted because it is already completed or cancelled.",
+                StatusCodeEnum.NOT_FOUND,
+            );
         }
-        res.status(200).json({ message: "Order deleted successfully" });
+        res.status(StatusCodeEnum.OK).json({
+            message: "Order deleted successfully",
+        });
     } catch (error) {
         console.error(error);
-        res.status(500).json({
-            message: "Problem deleting order, please try again.",
-        });
+        return handleError(
+            res,
+            "Problem deleting order, please try again.",
+            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+        );
     }
 };
 
 // Get the most ordered item
 export const getMostOrderedItem = async (req: Request, res: Response) => {
     try {
+        const userStoreId = (req as any).userStoreId;
+        const whereClause = userStoreId
+            ? eq(orders.storeId, userStoreId)
+            : undefined;
+
         // Aggregate total quantity for each menu item
         const result = await db
             .select({
@@ -415,12 +495,17 @@ export const getMostOrderedItem = async (req: Request, res: Response) => {
                 ),
             })
             .from(orderItems)
+            .where(whereClause)
             .groupBy(orderItems.menuItemId)
             .orderBy(desc(sql`totalQuantity`))
             .limit(1);
 
         if (result.length === 0) {
-            return res.status(404).json({ message: "No orders found." });
+            return handleError(
+                res,
+                "No orders found.",
+                StatusCodeEnum.NOT_FOUND,
+            );
         }
 
         // Fetch menu item details
@@ -429,15 +514,17 @@ export const getMostOrderedItem = async (req: Request, res: Response) => {
                 eq(menuItems.id, result[0].menuItemId),
         });
 
-        res.status(200).json({
+        res.status(StatusCodeEnum.OK).json({
             menuItem,
             totalQuantity: result[0].totalQuantity,
         });
     } catch (error) {
         console.error(error);
-        res.status(500).json({
-            message: "Problem fetching most ordered item, please try again.",
-        });
+        handleError(
+            res,
+            "Problem fetching most ordered item, please try again.",
+            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+        );
     }
 };
 
@@ -449,9 +536,17 @@ export const getMostOrderedItem = async (req: Request, res: Response) => {
 export const getOrderByReference = async (req: Request, res: Response) => {
     try {
         const { reference } = req.params;
+        const userStoreId = (req as any).userStoreId;
+        const isManager = req.user?.data.role === UserRoleEnum.MANAGER;
+
+        let whereClause: any = eq(orders.reference, reference);
+
+        if (!isManager && userStoreId) {
+            whereClause = and(whereClause, eq(orders.storeId, userStoreId));
+        }
 
         const order = await db.query.orders.findFirst({
-            where: eq(orders.reference, reference),
+            where: whereClause,
             with: {
                 seller: {
                     columns: {

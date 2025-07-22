@@ -117,11 +117,20 @@ export const loginUser = async (
             info: { message: string },
         ) {
             if (error) {
+                return handleError(
+                    res,
+                    error instanceof Error ? error.message : "Server error",
+                    StatusCodeEnum.INTERNAL_SERVER_ERROR,
+                );
                 return res.status(500).json(error);
             }
 
             if (!user) {
-                return res.status(401).json({ message: info.message });
+                return handleError(
+                    res,
+                    info.message || "Authentication failed",
+                    StatusCodeEnum.UNAUTHORIZED,
+                );
             }
 
             // prevent login of pseudo-deleted users
@@ -133,29 +142,38 @@ export const loginUser = async (
             });
 
             if (!data) {
-                return res
-                    .status(401)
-                    .json({ message: "Incorrect email or password." });
+                return handleError(
+                    res,
+                    "Incorrect email or password.",
+                    StatusCodeEnum.UNAUTHORIZED,
+                );
             }
 
             req.login(user, (loginError) => {
                 if (loginError) {
-                    return res.status(500).json(loginError);
+                    console.error("Login error:", loginError);
+                    return handleError(
+                        res,
+                        "Login failed, please try again.",
+                        StatusCodeEnum.INTERNAL_SERVER_ERROR,
+                    );
                 }
 
                 // Generate the token and send it in the response
                 const token = generateToken(user.data);
 
                 if (!token) {
-                    return res
-                        .status(500)
-                        .json({ message: "Token generation failed." });
+                    return handleError(
+                        res,
+                        "Token generation failed.",
+                        StatusCodeEnum.INTERNAL_SERVER_ERROR,
+                    );
                 }
 
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 const { password, ...userWithoutPassword } = user.data;
                 return res
-                    .status(200)
+                    .status(StatusCodeEnum.OK)
                     .json({ token, user: userWithoutPassword });
             });
         },
@@ -176,7 +194,7 @@ export const logoutUser = async (req: Request, res: Response) => {
     //
     //        res.status(200).json({ message: "Logged out successfully" });
     //    });
-    return res.status(200).json({ message: "Logout successful" });
+    return res.status(StatusCodeEnum.OK).json({ message: "Logout successful" });
 };
 
 export const getUserAccess = async (req: Request, res: Response) => {
@@ -195,7 +213,7 @@ export const getUserAccess = async (req: Request, res: Response) => {
             lastModified: user?.data.lastModified,
         };
 
-        res.status(200).json(access);
+        res.status(StatusCodeEnum.OK).json(access);
     } catch (error) {
         console.error(error);
         handleError(
