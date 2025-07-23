@@ -1,4 +1,4 @@
-import { and, eq, ne } from "drizzle-orm";
+import { and, eq, ne, or } from "drizzle-orm";
 import { NextFunction, Request, Response } from "express";
 import passport from "passport";
 
@@ -8,11 +8,100 @@ import { users } from "../schema/users-schema";
 import { handleError } from "../service/error-handling";
 import { passwordHashService } from "../service/password-hash-service";
 import { StatusCodeEnum, UserRoleEnum, UserStatusEnum } from "../types/enums";
+import { stores } from "../schema/stores-schema";
+
+/**
+ * @desc    Register a new Manager and their first Store
+ * @route   POST /api/auth/register
+ * @access  Public
+ */
+export const registerManagerAndStore = async (req: Request, res: Response) => {
+    try {
+        const {
+            firstName,
+            lastName,
+            email,
+            password,
+            phone,
+            storeName,
+            storeType,
+        } = req.body;
+
+        // Validate input
+        if (!email || !password || !firstName || !storeName || !storeType) {
+            return handleError(
+                res,
+                "First name, email, password, store name, and store type are required.",
+                StatusCodeEnum.BAD_REQUEST,
+            );
+        }
+
+        // Check for existing user
+        const existingUser = await db.query.users.findFirst({
+            where: or(eq(users.email, email), eq(users.phone, phone)),
+        });
+
+        if (existingUser) {
+            return handleError(
+                res,
+                "A user with this email or phone number already exists.",
+                StatusCodeEnum.CONFLICT,
+            );
+        }
+
+        // Use a transaction to ensure both user and store are created, or neither.
+        const { user, token } = await db.transaction(async (tx) => {
+            // Create the store first
+            const [newStore] = await tx
+                .insert(stores)
+                .values({ name: storeName, storeType })
+                .returning();
+
+            // Then create the user, assigning them the manager role and linking the new store
+            const hashedPassword = await passwordHashService.hash(password);
+            const [newUser] = await tx
+                .insert(users)
+                .values({
+                    firstName,
+                    lastName,
+                    email,
+                    password: hashedPassword,
+                    phone,
+                    role: UserRoleEnum.MANAGER, // Automatically a manager
+                    status: UserStatusEnum.ACTIVE,
+                    storeId: newStore.id, // Link to the new store
+                })
+                .returning();
+
+            // Generate a token for the new user
+            const token = generateToken(newUser);
+
+            return { user: newUser, token };
+        });
+
+        // Return the new user (without password) and the token
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { password: _, ...userWithoutPassword } = user;
+
+        res.status(StatusCodeEnum.CREATED).json({
+            user: userWithoutPassword,
+            token,
+        });
+    } catch (error) {
+        console.error("Registration Error:", error);
+        handleError(
+            res,
+            "Registration failed. Please try again.",
+            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+        );
+    }
+};
 
 /**
  * @desc    Get all users (Admin only)
  * @route   GET /api/users
- * @access  Private/Admin
+ * @access  Private Managers | Admins
+ *          Managers can see all users in their store, Admins can on only the users in their store
  */
 export const getAllUsers = async (req: Request, res: Response) => {
     try {
@@ -85,7 +174,7 @@ export const getUserById = async (req: Request, res: Response) => {
         if (!isManager && !isOwnProfile && !isAdminInSameStore) {
             return handleError(
                 res,
-                "You do not have permission to view this user's profile.",
+                "You do not have permission to view this profile.",
                 StatusCodeEnum.FORBIDDEN,
             );
         }
