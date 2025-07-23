@@ -4,6 +4,7 @@ import { stores } from "../schema/stores-schema";
 import { eq } from "drizzle-orm";
 import { handleError } from "../service/error-handling";
 import { StatusCodeEnum } from "../types/enums";
+import { users } from "../schema/users-schema";
 
 export const getAllStores = async (req: Request, res: Response) => {
     try {
@@ -59,10 +60,29 @@ export const getStoreById = async (req: Request, res: Response) => {
 export const createStore = async (req: Request, res: Response) => {
     try {
         const { name, location, storeType, storeParentId } = req.body;
-        const [newStore] = await db
-            .insert(stores)
-            .values({ name, location, storeType, storeParentId })
-            .returning();
+        const currentUser = req.user?.data;
+
+        const newStore = await db.transaction(async (tx) => {
+            // Create the new store
+            const [insertedStore] = await tx
+                .insert(stores)
+                .values({ name, location, storeType, storeParentId })
+                .returning();
+
+            // If the creator is a manager without a store, assign them to this new store.
+            if (currentUser && !currentUser.storeId) {
+                await tx
+                    .update(users)
+                    .set({ storeId: insertedStore.id })
+                    .where(eq(users.id, currentUser.id));
+            }
+
+            return insertedStore;
+        });
+        // const [newStore] = await db
+        //     .insert(stores)
+        //     .values({ name, location, storeType, storeParentId })
+        //     .returning();
         res.status(StatusCodeEnum.CREATED).json(newStore);
     } catch (error) {
         console.log("error", error);

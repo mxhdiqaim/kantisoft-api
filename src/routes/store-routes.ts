@@ -6,7 +6,7 @@ const router = Router();
 
 router.get("/", controller.getAllStores);
 router.get("/:id", controller.getStoreById);
-router.post("/", isManager, controller.createStore);
+router.post("/create", isManager, controller.createStore);
 router.patch("/:id", isManager, controller.updateStore);
 router.delete("/:id", isManager, controller.deleteStore);
 

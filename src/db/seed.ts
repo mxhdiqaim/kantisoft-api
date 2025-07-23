@@ -10,7 +10,7 @@ const createSeedAdmin = async () => {
             firstName: "Musa",
             lastName: "Ikechi",
             email: "manager@example.com",
-            password: passwordHashService("password123"),
+            password: passwordHashService.hash("password123"),
             role: "manager",
             status: "active",
             phone: "08108904958",
