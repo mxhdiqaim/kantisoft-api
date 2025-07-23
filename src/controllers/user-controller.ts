@@ -42,6 +42,149 @@ export const getAllUsers = async (req: Request, res: Response) => {
     }
 };
 
+/**
+ * @desc    Get a single user by their ID
+ * @route   GET /api/users/:id
+ * @access  Private (Manager, Admin of the same store, or the user themselves)
+ */
+export const getUserById = async (req: Request, res: Response) => {
+    try {
+        const { id: targetUserId } = req.params;
+        const currentUser = req.user?.data;
+
+        // Check if a user is authenticated
+        if (!currentUser) {
+            return handleError(
+                res,
+                "Authentication required.",
+                StatusCodeEnum.UNAUTHORIZED,
+            );
+        }
+
+        // Fetch the user profile that is being requested
+        const targetUser = await db.query.users.findFirst({
+            where: eq(users.id, targetUserId),
+        });
+
+        if (!targetUser) {
+            return handleError(
+                res,
+                "User not found.",
+                StatusCodeEnum.NOT_FOUND,
+            );
+        }
+
+        // Authorization Logic
+        const isManager = currentUser.role === UserRoleEnum.MANAGER;
+        const isOwnProfile = currentUser.id === targetUser.id;
+        const isAdminInSameStore =
+            currentUser.role === UserRoleEnum.ADMIN &&
+            currentUser.storeId === targetUser.storeId;
+
+        // Deny access if none of the conditions are met
+        if (!isManager && !isOwnProfile && !isAdminInSameStore) {
+            return handleError(
+                res,
+                "You do not have permission to view this user's profile.",
+                StatusCodeEnum.FORBIDDEN,
+            );
+        }
+
+        // 5. Return user data without the password
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { password, ...userWithoutPassword } = targetUser;
+        res.status(StatusCodeEnum.OK).json(userWithoutPassword);
+    } catch (error) {
+        console.error("Error fetching user by ID:", error);
+        handleError(
+            res,
+            "Failed to fetch user.",
+            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+        );
+    }
+};
+
+/**
+ * @desc    Soft delete a user by setting their status to 'deleted'
+ * @route   DELETE /api/users/:id
+ * @access  Private (Manager or Admin)
+ */
+export const deleteUser = async (req: Request, res: Response) => {
+    try {
+        const { id: targetUserId } = req.params;
+        const currentUser = req.user?.data;
+
+        // Check for authentication
+        if (!currentUser) {
+            return handleError(
+                res,
+                "Authentication required.",
+                StatusCodeEnum.UNAUTHORIZED,
+            );
+        }
+
+        // Prevent users from deleting themselves
+        if (currentUser.id === targetUserId) {
+            return handleError(
+                res,
+                "You cannot perform this action",
+                StatusCodeEnum.FORBIDDEN,
+            );
+        }
+
+        // Fetch the user to be deleted to check their role and store
+        const targetUser = await db.query.users.findFirst({
+            where: eq(users.id, targetUserId),
+        });
+
+        if (!targetUser) {
+            return handleError(
+                res,
+                "User not found.",
+                StatusCodeEnum.NOT_FOUND,
+            );
+        }
+
+        // Authorization Logic: Who can delete whom?
+        const isManager = currentUser.role === UserRoleEnum.MANAGER;
+        const isAdmin = currentUser.role === UserRoleEnum.ADMIN;
+
+        const canDelete =
+            // A Manager can delete any user except another Manager
+            (isManager && targetUser.role !== UserRoleEnum.MANAGER) ||
+            // An Admin can delete Users or Guests in the same store
+            (isAdmin &&
+                (targetUser.role === UserRoleEnum.USER ||
+                    targetUser.role === UserRoleEnum.GUEST) &&
+                currentUser.storeId === targetUser.storeId);
+
+        if (!canDelete) {
+            return handleError(
+                res,
+                "You do not have permission to delete this user.",
+                StatusCodeEnum.FORBIDDEN,
+            );
+        }
+
+        // Perform the soft delete by updating the status
+        await db
+            .update(users)
+            .set({ status: UserStatusEnum.DELETED })
+            .where(eq(users.id, targetUserId));
+
+        res.status(StatusCodeEnum.OK).json({
+            message: "User account has been successfully deleted.",
+        });
+    } catch (error) {
+        console.error("Error deleting user:", error);
+        handleError(
+            res,
+            "Failed to delete user.",
+            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+        );
+    }
+};
+
 export const createUser = async (req: Request, res: Response) => {
     try {
         const payload = req.body;
@@ -80,7 +223,7 @@ export const createUser = async (req: Request, res: Response) => {
             );
         }
 
-        const hashedPassword = passwordHashService(payload.password);
+        const hashedPassword = passwordHashService.hash(payload.password);
 
         const [newUser] = await db
             .insert(users)
@@ -99,6 +242,189 @@ export const createUser = async (req: Request, res: Response) => {
         handleError(
             res,
             "Problem creating user, please try again",
+            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+        );
+    }
+};
+
+/**
+ * @desc    Update a user's profile information
+ * @route   PATCH /api/users/:id
+ * @access  Private
+ */
+export const updateUser = async (req: Request, res: Response) => {
+    try {
+        const { id: targetUserId } = req.params;
+        const currentUser = req.user?.data;
+        const updateData = req.body;
+
+        // Authenticated check
+        if (!currentUser) {
+            return handleError(
+                res,
+                "Authentication required.",
+                StatusCodeEnum.UNAUTHORIZED,
+            );
+        }
+
+        // Fetch the user to be updated
+        const targetUser = await db.query.users.findFirst({
+            where: eq(users.id, targetUserId),
+        });
+
+        if (!targetUser) {
+            return handleError(
+                res,
+                "User not found.",
+                StatusCodeEnum.NOT_FOUND,
+            );
+        }
+
+        // Sanitize payload - password cannot be updated here
+        delete updateData.password;
+        delete updateData.id; // Prevent changing the ID
+
+        const isSelfUpdate = currentUser.id === targetUserId;
+        const isManager = currentUser.role === UserRoleEnum.MANAGER;
+        const isAdmin = currentUser.role === UserRoleEnum.ADMIN;
+
+        // Authorization Logic
+        let canUpdate = false;
+
+        if (isSelfUpdate) {
+            canUpdate = true;
+            // Users cannot change their own role, store, or status
+            delete updateData.role;
+            delete updateData.storeId;
+            delete updateData.status;
+        } else if (isManager) {
+            // Managers can update any user
+            canUpdate = true;
+        } else if (isAdmin) {
+            // Admins can update users in their store, but not Managers
+            if (
+                targetUser.role !== UserRoleEnum.MANAGER &&
+                currentUser.storeId === targetUser.storeId
+            ) {
+                canUpdate = true;
+                // Admins cannot change a user's role or store assignment
+                delete updateData.role;
+                delete updateData.storeId;
+            }
+        }
+
+        if (!canUpdate) {
+            return handleError(
+                res,
+                "You do not have permission to update this user.",
+                StatusCodeEnum.FORBIDDEN,
+            );
+        }
+
+        // 5. Perform the update
+        if (Object.keys(updateData).length === 0) {
+            return handleError(
+                res,
+                "No valid fields provided for update.",
+                StatusCodeEnum.BAD_REQUEST,
+            );
+        }
+
+        const [updatedUser] = await db
+            .update(users)
+            .set({ ...updateData, lastModified: new Date() })
+            .where(eq(users.id, targetUserId))
+            .returning();
+
+        // 6. Return the updated user data (without password)
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { password, ...userWithoutPassword } = updatedUser;
+        res.status(StatusCodeEnum.OK).json(userWithoutPassword);
+    } catch (error) {
+        console.error("Error updating user:", error);
+        handleError(
+            res,
+            "Failed to update user.",
+            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+        );
+    }
+};
+
+/**
+ * @desc    Update the current user's password
+ * @route   PATCH /api/users/update-password
+ * @access  Private (for the logged-in user)
+ */
+export const updatePassword = async (req: Request, res: Response) => {
+    try {
+        const { oldPassword, newPassword } = req.body;
+        const currentUser = req.user?.data;
+
+        // 1. Basic validation
+        if (!currentUser) {
+            return handleError(
+                res,
+                "Authentication required.",
+                StatusCodeEnum.UNAUTHORIZED,
+            );
+        }
+        if (!oldPassword || !newPassword) {
+            return handleError(
+                res,
+                "Old password and new password are required.",
+                StatusCodeEnum.BAD_REQUEST,
+            );
+        }
+        if (newPassword.length < 6) {
+            return handleError(
+                res,
+                "New password must be at least 6 characters long.",
+                StatusCodeEnum.BAD_REQUEST,
+            );
+        }
+
+        // 2. Fetch the user's current password from the DB
+        const userRecord = await db.query.users.findFirst({
+            where: eq(users.id, currentUser.id),
+            columns: { password: true },
+        });
+
+        if (!userRecord) {
+            return handleError(
+                res,
+                "User not found.",
+                StatusCodeEnum.NOT_FOUND,
+            );
+        }
+
+        // 3. Verify the old password
+        const isMatch = await passwordHashService.compare(
+            oldPassword,
+            userRecord.password,
+        );
+        if (!isMatch) {
+            return handleError(
+                res,
+                "Incorrect old password.",
+                StatusCodeEnum.FORBIDDEN,
+            );
+        }
+
+        // 4. Hash the new password and update the database
+        const hashedNewPassword = await passwordHashService.hash(newPassword);
+        await db
+            .update(users)
+            .set({ password: hashedNewPassword, lastModified: new Date() })
+            .where(eq(users.id, currentUser.id));
+
+        res.status(StatusCodeEnum.OK).json({
+            message: "Password updated successfully.",
+        });
+    } catch (error) {
+        console.error("Error updating password:", error);
+        handleError(
+            res,
+            "Failed to update password.",
             StatusCodeEnum.INTERNAL_SERVER_ERROR,
         );
     }

@@ -12,6 +12,7 @@ export const userStatusEnum = pgEnum("status", [
     "active",
     "inactive",
     "deleted",
+    "banned",
 ]);
 
 // Users' table

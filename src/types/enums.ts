@@ -9,6 +9,7 @@ export enum UserStatusEnum {
     ACTIVE = "active",
     INACTIVE = "inactive",
     DELETED = "deleted",
+    BANNED = "banned",
 }
 
 export enum OrderStatusEnum {

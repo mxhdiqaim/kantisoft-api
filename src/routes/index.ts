@@ -17,7 +17,7 @@ const router = express.Router();
 router.use("/users", users);
 
 // Store CRUD is for Managers only
-router.use("/stores", protectedRoute, isManager, stores);
+router.use("/stores", protectedRoute, stores);
 
 // Activity log is for Managers only
 router.use("/activities", protectedRoute, isManager, activities);
