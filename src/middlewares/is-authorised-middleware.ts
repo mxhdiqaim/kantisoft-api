@@ -1,14 +1,10 @@
-import { Request, Response, NextFunction } from "express";
+import { Response, NextFunction } from "express";
 import { handleError } from "../service/error-handling";
 import { StatusCodeEnum, UserRoleEnum } from "../types/enums";
-import { AuthUserT } from "../config/auth-config";
-
-interface AuthenticatedRequest extends Request {
-    user?: AuthUserT;
-}
+import { CustomRequest } from "../types/express";
 
 export const isAuthorized = (allowedRoles: UserRoleEnum[]) => {
-    return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    return (req: CustomRequest, res: Response, next: NextFunction) => {
         const userRole = req.user?.data.role;
 
         if (userRole && allowedRoles.includes(userRole as UserRoleEnum)) {

@@ -1,5 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { Request, Response } from "express";
+import { Response } from "express";
 import db from "../db";
 import { sql, sum, count, desc, gte, lt, and, eq, min, max } from "drizzle-orm";
 import { getPeriodDates } from "../utils/get-period-dates";
@@ -9,6 +8,7 @@ import { StatusCodeEnum } from "../types/enums";
 import { OrderBy, Period } from "../types";
 import { menuItems } from "../schema/menu-items-schema";
 import moment from "moment-timezone";
+import { CustomRequest } from "../types/express";
 
 /**
  * @description Get core sales summary metrics (Revenue, Order Count, Avg Order Value)
@@ -17,10 +17,10 @@ import moment from "moment-timezone";
  * @queryParam period string ('today', 'week', 'month', 'all-time')
  * @queryParam timezone string (e.g., 'Africa/Lagos') - defaults if not provided
  */
-export const getSalesSummary = async (req: Request, res: Response) => {
+export const getSalesSummary = async (req: CustomRequest, res: Response) => {
     const period = (req.query.period as Period) || "today";
     const timezone = "Africa/Lagos";
-    const userStoreId = (req as any).userStoreId; // Get storeId from middleware
+    const userStoreId = req.userStoreId!; // Get storeId from middleware
 
     try {
         const { startDate, endDate } = getPeriodDates(
@@ -28,20 +28,30 @@ export const getSalesSummary = async (req: Request, res: Response) => {
             timezone,
         );
 
-        let whereClause =
-            startDate && endDate
-                ? and(
-                      gte(orders.orderDate, startDate),
-                      lt(orders.orderDate, endDate),
-                  )
-                : undefined;
-        // If the user is an Admin, add their storeId to the where clause
-        if (userStoreId) {
-            const storeCondition = eq(orders.storeId, userStoreId);
-            whereClause = whereClause
-                ? and(whereClause, storeCondition)
-                : storeCondition;
+        let whereClause;
+
+        // Apply date range filter first if applicable
+        if (startDate && endDate) {
+            whereClause = and(
+                gte(orders.orderDate, startDate),
+                lt(orders.orderDate, endDate),
+            );
         }
+
+        // Always apply storeId filter for multi-tenancy
+        // If date range is absent, storeCondition becomes the primary whereClause
+        const storeCondition = eq(orders.storeId, userStoreId);
+        whereClause = whereClause
+            ? and(whereClause, storeCondition)
+            : storeCondition; // CRITICAL FIX: Always include storeCondition
+
+        // // If the user is an Admin, add their storeId to the where clause
+        // if (userStoreId) {
+        //     const storeCondition = eq(orders.storeId, userStoreId);
+        //     whereClause = whereClause
+        //         ? and(whereClause, storeCondition)
+        //         : storeCondition;
+        // }
 
         const result = await db
             .select({
@@ -54,14 +64,16 @@ export const getSalesSummary = async (req: Request, res: Response) => {
 
         const summary = result[0];
 
-        res.status(200).json({
+        const salesSummary = {
             period,
             totalRevenue: parseFloat(summary.totalRevenue || "0").toFixed(2),
             totalOrders: parseInt(String(summary.totalOrders || "0")),
             avgOrderValue: parseFloat(
                 String(summary.avgOrderValue ?? "0"),
             ).toFixed(2),
-        });
+        };
+
+        res.status(StatusCodeEnum.OK).json(salesSummary);
     } catch (error) {
         console.error(
             `Error fetching sales summary for period ${period}:`,
@@ -84,12 +96,12 @@ export const getSalesSummary = async (req: Request, res: Response) => {
  * @queryParam period string ('today', 'week', 'month', 'all-time')
  * @queryParam timezone string (e.g., 'Africa/Lagos')
  */
-export const getTopSells = async (req: Request, res: Response) => {
+export const getTopSells = async (req: CustomRequest, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 5;
     const orderBy = (req.query.orderBy as OrderBy) || "quantity"; // 'quantity' or 'revenue'
     const period = (req.query.period as Period) || "month";
     const timezone = "Africa/Lagos";
-    const userStoreId = (req as any).userStoreId; // Get storeId from middleware
+    const userStoreId = req.userStoreId!; // Get storeId from middleware
 
     try {
         const { startDate, endDate } = getPeriodDates(
@@ -97,21 +109,20 @@ export const getTopSells = async (req: Request, res: Response) => {
             timezone,
         );
 
-        let whereClause =
-            startDate && endDate
-                ? and(
-                      gte(orders.orderDate, startDate),
-                      lt(orders.orderDate, endDate),
-                  )
-                : undefined;
+        let whereClause;
 
-        // If the user is an Admin, add their storeId to the where clause
-        if (userStoreId) {
-            const storeCondition = eq(orders.storeId, userStoreId);
-            whereClause = whereClause
-                ? and(whereClause, storeCondition)
-                : storeCondition;
+        if (startDate && endDate) {
+            whereClause = and(
+                gte(orders.orderDate, startDate),
+                lt(orders.orderDate, endDate),
+            );
         }
+
+        // Apply storeId filter for multi-tenancy
+        const storeCondition = eq(orders.storeId, userStoreId);
+        whereClause = whereClause
+            ? and(whereClause, storeCondition)
+            : storeCondition; // CRITICAL FIX: Always include storeCondition
 
         const topItemsQuery = db
             .select({
@@ -131,6 +142,7 @@ export const getTopSells = async (req: Request, res: Response) => {
             .groupBy(orderItems.menuItemId, menuItems.name);
 
         let orderedQuery;
+
         if (orderBy === "revenue") {
             orderedQuery = topItemsQuery.orderBy(
                 desc(
@@ -147,15 +159,15 @@ export const getTopSells = async (req: Request, res: Response) => {
 
         const topItems = await orderedQuery.limit(limit);
 
-        res.status(200).json(
-            topItems.map((m) => ({
-                ...m,
-                totalQuantitySold: parseFloat(m.totalQuantitySold || "0"),
-                totalRevenueGenerated: parseFloat(
-                    m.totalRevenueGenerated || "0",
-                ).toFixed(2),
-            })),
-        );
+        const topSells = topItems.map((m) => ({
+            ...m,
+            totalQuantitySold: parseFloat(m.totalQuantitySold || "0"),
+            totalRevenueGenerated: parseFloat(
+                m.totalRevenueGenerated || "0",
+            ).toFixed(2),
+        }));
+
+        res.status(StatusCodeEnum.OK).json(topSells);
     } catch (error) {
         console.error(
             `Error fetching top products for period ${period}:`,
@@ -174,20 +186,24 @@ export const getTopSells = async (req: Request, res: Response) => {
  * @route GET /api/dashboard/inventory-summary
  * @access Private (Admin/Manager) - Only relevant for supermarket/pharmacy
  */
-export const getInventorySummary = async (req: Request, res: Response) => {
+export const getInventorySummary = async (
+    req: CustomRequest,
+    res: Response,
+) => {
     try {
-        const userStoreId = (req as any).userStoreId; // Get storeId from middleware
-        const whereClause = userStoreId
-            ? eq(menuItems.storeId, userStoreId)
-            : undefined;
+        const userStoreId = req.userStoreId!; // Get storeId from middleware
+
+        // CRITICAL FIX: The whereClause should ONLY be the storeId condition.
+        // If `userStoreId` is defined (which it should be), it should never be undefined.
+        const whereClause = eq(menuItems.storeId, userStoreId);
 
         const lowStockItems = await db
             .select({
                 id: menuItems.id,
                 name: menuItems.name,
                 isAvailable: menuItems.isAvailable,
-                //   currentStock: products.currentStock,
-                //   minStockLevel: products.minStockLevel,
+                currentMenu: menuItems.currentMenu,
+                minMenuLevel: menuItems.minMenuLevel,
             })
             .from(menuItems)
             .where(and(whereClause, sql`${!menuItems.isAvailable}`));
@@ -200,10 +216,12 @@ export const getInventorySummary = async (req: Request, res: Response) => {
             .from(menuItems)
             .where(and(whereClause, eq(menuItems.isAvailable, false)));
 
-        res.status(200).json({
+        res.status(StatusCodeEnum.OK).json({
             totalLowStockItems: lowStockItems.length,
             totalOutOfStockItems: outOfStockItems.length,
-            // lowStockDetails: lowStockItems.filter(item => item.currentStock > 0), // Items that are low but not zero
+            lowStockDetails: lowStockItems.filter(
+                (item) => item.currentMenu > 0,
+            ), // Items that are low but not zero
             outOfStockDetails: outOfStockItems,
         });
     } catch (error) {
@@ -223,10 +241,10 @@ export const getInventorySummary = async (req: Request, res: Response) => {
  * @queryParam period string ('week', 'month')
  * @queryParam timezone string (e.g., 'Africa/Lagos')
  */
-export const getSalesTrend = async (req: Request, res: Response) => {
+export const getSalesTrend = async (req: CustomRequest, res: Response) => {
     const period = (req.query.period as Period) || "week"; // 'week' or 'month'
     const timezone = "Africa/Lagos";
-    const userStoreId = (req as any).userStoreId; // Get storeId from middleware
+    const userStoreId = req.userStoreId!; // Get storeId from middleware
 
     try {
         // Handle 'all-time' period by grouping by month
@@ -288,7 +306,7 @@ export const getSalesTrend = async (req: Request, res: Response) => {
                 dailyOrders: salesMap.get(date)?.orders || 0,
             }));
 
-            return res.status(200).json(formattedTrend);
+            return res.status(StatusCodeEnum.OK).json(formattedTrend);
         }
 
         const { startDate, endDate } = getPeriodDates(period, timezone);
@@ -300,17 +318,15 @@ export const getSalesTrend = async (req: Request, res: Response) => {
                 StatusCodeEnum.BAD_REQUEST,
             );
         }
-        const baseWhere =
-            startDate && endDate
-                ? and(
-                      gte(orders.orderDate, startDate),
-                      lt(orders.orderDate, endDate),
-                  )
-                : undefined;
 
-        const whereClause = userStoreId
-            ? and(baseWhere, eq(orders.storeId, userStoreId))
-            : baseWhere;
+        // Base where clause for date range
+        const baseWhere = and(
+            gte(orders.orderDate, startDate),
+            lt(orders.orderDate, endDate),
+        );
+
+        // CRITICAL FIX: Combine base where with storeId filter
+        const whereClause = and(baseWhere, eq(orders.storeId, userStoreId));
 
         // Group by day using PostgreSQL's TO_CHAR for formatting date
         const salesTrend = await db
@@ -350,7 +366,7 @@ export const getSalesTrend = async (req: Request, res: Response) => {
             dailyOrders: salesMap.get(date)?.dailyOrders || 0,
         }));
 
-        res.status(200).json(formattedTrend);
+        res.status(StatusCodeEnum.OK).json(formattedTrend);
     } catch (error) {
         console.error(
             `Error fetching sales trend for period ${period}: ${error}`,

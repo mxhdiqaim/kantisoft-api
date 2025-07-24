@@ -1,16 +1,11 @@
-import { Request, Response, NextFunction } from "express";
+import { Response, NextFunction } from "express";
 import { handleError } from "../service/error-handling";
 import { StatusCodeEnum } from "../types/enums";
 
-import { type AuthUserT } from "../config/auth-config";
-
-// This is a placeholder. You should have a custom Request type that includes your user object.
-interface AuthenticatedRequest extends Request {
-    user?: AuthUserT;
-}
+import { CustomRequest } from "../types/express";
 
 export const isAdmin = (
-    req: AuthenticatedRequest,
+    req: CustomRequest,
     res: Response,
     next: NextFunction,
 ) => {

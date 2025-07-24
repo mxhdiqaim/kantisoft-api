@@ -1,18 +1,20 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { and, eq, ne, or } from "drizzle-orm";
 import { NextFunction, Request, Response } from "express";
 import passport from "passport";
 
 import { generateToken } from "../config/jwt-config";
 import db from "../db";
-import { users } from "../schema/users-schema";
+import { InsertUserSchemaT, users } from "../schema/users-schema";
 import { handleError } from "../service/error-handling";
 import { passwordHashService } from "../service/password-hash-service";
 import { StatusCodeEnum, UserRoleEnum, UserStatusEnum } from "../types/enums";
 import { stores } from "../schema/stores-schema";
+import { CustomRequest } from "../types/express";
 
 /**
  * @desc    Register a new Manager and their first Store
- * @route   POST /api/auth/register
+ * @route   POST /api/register
  * @access  Public
  */
 export const registerManagerAndStore = async (req: Request, res: Response) => {
@@ -99,13 +101,28 @@ export const registerManagerAndStore = async (req: Request, res: Response) => {
 
 /**
  * @desc    Get all users (Admin only)
- * @route   GET /api/users
+ * @route   GET /users
  * @access  Private Managers | Admins
  *          Managers can see all users in their store, Admins can on only the users in their store
  */
-export const getAllUsers = async (req: Request, res: Response) => {
+export const getAllUsers = async (req: CustomRequest, res: Response) => {
     try {
-        // Fetch all users, excluding the password field for security
+        const currentUser = req.user?.data;
+        const storeId = currentUser?.storeId;
+
+        // Multi-tenancy check: Ensure the user is authenticated and has a storeId.
+        if (
+            !storeId ||
+            (currentUser?.role !== UserRoleEnum.MANAGER &&
+                currentUser?.role !== UserRoleEnum.ADMIN)
+        ) {
+            return handleError(
+                res,
+                "You do not have permission to view all users.",
+                StatusCodeEnum.FORBIDDEN,
+            );
+        }
+
         const allUsers = await db
             .select({
                 id: users.id,
@@ -118,9 +135,10 @@ export const getAllUsers = async (req: Request, res: Response) => {
                 createdAt: users.createdAt,
                 lastModified: users.lastModified,
             })
-            .from(users);
+            .from(users)
+            .where(eq(users.storeId, String(storeId)));
 
-        res.status(200).json(allUsers);
+        res.status(StatusCodeEnum.OK).json(allUsers);
     } catch (error) {
         console.error("Error fetching all users:", error);
         return handleError(
@@ -133,16 +151,17 @@ export const getAllUsers = async (req: Request, res: Response) => {
 
 /**
  * @desc    Get a single user by their ID
- * @route   GET /api/users/:id
+ * @route   GET /users/:id
  * @access  Private (Manager, Admin of the same store, or the user themselves)
  */
-export const getUserById = async (req: Request, res: Response) => {
+export const getUserById = async (req: CustomRequest, res: Response) => {
     try {
         const { id: targetUserId } = req.params;
         const currentUser = req.user?.data;
+        const userStoreId = currentUser?.storeId;
 
         // Check if a user is authenticated
-        if (!currentUser) {
+        if (!currentUser || !userStoreId) {
             return handleError(
                 res,
                 "Authentication required.",
@@ -152,7 +171,10 @@ export const getUserById = async (req: Request, res: Response) => {
 
         // Fetch the user profile that is being requested
         const targetUser = await db.query.users.findFirst({
-            where: eq(users.id, targetUserId),
+            where: and(
+                eq(users.id, targetUserId),
+                eq(users.storeId, String(userStoreId)), // <-- CRITICAL FIX: Add multi-tenancy filter
+            ),
         });
 
         if (!targetUser) {
@@ -195,10 +217,10 @@ export const getUserById = async (req: Request, res: Response) => {
 
 /**
  * @desc    Soft delete a user by setting their status to 'deleted'
- * @route   DELETE /api/users/:id
+ * @route   DELETE /users/:id
  * @access  Private (Manager or Admin)
  */
-export const deleteUser = async (req: Request, res: Response) => {
+export const deleteUser = async (req: CustomRequest, res: Response) => {
     try {
         const { id: targetUserId } = req.params;
         const currentUser = req.user?.data;
@@ -221,9 +243,12 @@ export const deleteUser = async (req: Request, res: Response) => {
             );
         }
 
-        // Fetch the user to be deleted to check their role and store
+        // Fetch the user to be deleted, but only if they are in the current user's store.
         const targetUser = await db.query.users.findFirst({
-            where: eq(users.id, targetUserId),
+            where: and(
+                eq(users.id, targetUserId),
+                eq(users.storeId, String(currentUser.storeId)), // <-- CRITICAL FIX: Add multi-tenancy filter
+            ),
         });
 
         if (!targetUser) {
@@ -259,7 +284,12 @@ export const deleteUser = async (req: Request, res: Response) => {
         await db
             .update(users)
             .set({ status: UserStatusEnum.DELETED })
-            .where(eq(users.id, targetUserId));
+            .where(
+                and(
+                    eq(users.id, targetUserId),
+                    eq(users.storeId, String(currentUser.storeId)), // <-- CRITICAL FIX: Add multi-tenancy filter
+                ),
+            );
 
         res.status(StatusCodeEnum.OK).json({
             message: "User account has been successfully deleted.",
@@ -274,7 +304,7 @@ export const deleteUser = async (req: Request, res: Response) => {
     }
 };
 
-export const createUser = async (req: Request, res: Response) => {
+export const createUser = async (req: CustomRequest, res: Response) => {
     try {
         const payload = req.body;
         const currentUser = req.user?.data;
@@ -288,17 +318,53 @@ export const createUser = async (req: Request, res: Response) => {
             );
         }
 
+        // CRITICAL FIX: Get the storeId from the current user
+        const storeId = currentUser.storeId;
+        if (!storeId) {
+            return handleError(
+                res,
+                "User does not belong to a store.",
+                StatusCodeEnum.FORBIDDEN,
+            );
+        }
+
+        // Example of an updated manual check for email uniqueness
+        const existingUserByEmail = await db
+            .select()
+            .from(users)
+            .where(
+                and(
+                    eq(users.email, payload.email),
+                    eq(users.storeId, storeId), // Filter by current user's storeId
+                ),
+            )
+            .limit(1);
+
+        if (existingUserByEmail.length > 0) {
+            return handleError(
+                res,
+                "A user with this email already exists in this store.",
+                StatusCodeEnum.CONFLICT,
+            );
+        }
+
+        // Authorization: Current user's role vs. target user's role
         const { role: currentRole } = currentUser;
         const { role: targetRole } = payload;
 
         // Define allowed roles for creation based on the current user's role
         const allowedCreations: { [key: string]: string[] } = {
             [UserRoleEnum.MANAGER]: [
+                // UserRoleEnum.MANAGER,
                 UserRoleEnum.ADMIN,
                 UserRoleEnum.USER,
                 UserRoleEnum.GUEST,
             ],
-            [UserRoleEnum.ADMIN]: [UserRoleEnum.USER, UserRoleEnum.GUEST],
+            [UserRoleEnum.ADMIN]: [
+                // UserRoleEnum.ADMIN,
+                UserRoleEnum.USER,
+                UserRoleEnum.GUEST,
+            ],
         };
 
         // Get the list of roles the current user is allowed to create
@@ -307,27 +373,63 @@ export const createUser = async (req: Request, res: Response) => {
         if (!canCreateRoles.includes(targetRole)) {
             return handleError(
                 res,
-                "You don't have permission to create new user",
+                "You don't have permission to create this user type.",
                 StatusCodeEnum.FORBIDDEN,
             );
         }
 
-        const hashedPassword = passwordHashService.hash(payload.password);
+        const hashedPassword = await passwordHashService.hash(payload.password);
 
+        // *** CRITICAL CHANGE 3: Handle phone number conversion to NULL ***
+        const phoneToInsert =
+            payload.phone === "" || payload.phone === undefined
+                ? null
+                : payload.phone;
+
+        // Construct the user object for insertion, explicitly picking fields
+        // This prevents unexpected fields from req.body from being inserted
+        const newUserToInsert: InsertUserSchemaT = {
+            firstName: payload.firstName,
+            lastName: payload.lastName,
+            email: payload.email,
+            password: hashedPassword,
+            phone: phoneToInsert, // Use the NULL-safe phone value
+            role: targetRole, // Use the validated target role
+            status: UserStatusEnum.ACTIVE,
+            storeId: storeId, // Assign the store ID from the current user
+        };
+
+        // CRITICAL FIX: Add the storeId to the values object
         const [newUser] = await db
             .insert(users)
-            .values({
-                ...payload,
-                password: hashedPassword,
-            })
+            .values(newUserToInsert)
             .returning();
 
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { password, ...userWithoutPassword } = newUser;
 
         res.status(StatusCodeEnum.CREATED).json(userWithoutPassword);
-    } catch (error) {
+    } catch (error: any) {
         console.error(error);
+        // *** CRITICAL CHANGE 4: More specific error handling for unique constraints ***
+        if (error.cause && error.cause.code === "23505") {
+            // PostgreSQL unique violation error code
+            if (error.cause.constraint === "users_email_unique") {
+                return handleError(
+                    res,
+                    "A user with this email already exists.",
+                    StatusCodeEnum.CONFLICT,
+                );
+            }
+            if (error.cause.constraint === "users_storeId_phone_unique") {
+                // Your new constraint name
+                return handleError(
+                    res,
+                    "A user with this phone number already exists in this store.",
+                    StatusCodeEnum.CONFLICT,
+                );
+            }
+        }
         handleError(
             res,
             "Problem creating user, please try again",
@@ -338,10 +440,10 @@ export const createUser = async (req: Request, res: Response) => {
 
 /**
  * @desc    Update a user's profile information
- * @route   PATCH /api/users/:id
+ * @route   PATCH /users/:id
  * @access  Private
  */
-export const updateUser = async (req: Request, res: Response) => {
+export const updateUser = async (req: CustomRequest, res: Response) => {
     try {
         const { id: targetUserId } = req.params;
         const currentUser = req.user?.data;
@@ -358,7 +460,10 @@ export const updateUser = async (req: Request, res: Response) => {
 
         // Fetch the user to be updated
         const targetUser = await db.query.users.findFirst({
-            where: eq(users.id, targetUserId),
+            where: and(
+                eq(users.id, targetUserId),
+                eq(users.storeId, String(currentUser.storeId)), // <-- CRITICAL FIX: Add multi-tenancy filter
+            ),
         });
 
         if (!targetUser) {
@@ -381,13 +486,13 @@ export const updateUser = async (req: Request, res: Response) => {
         let canUpdate = false;
 
         if (isSelfUpdate) {
-            canUpdate = true;
             // Users cannot change their own role, store, or status
             delete updateData.role;
             delete updateData.storeId;
             delete updateData.status;
+            canUpdate = true;
         } else if (isManager) {
-            // Managers can update any user
+            // Managers can update any user in their store
             canUpdate = true;
         } else if (isAdmin) {
             // Admins can update users in their store, but not Managers
@@ -395,10 +500,10 @@ export const updateUser = async (req: Request, res: Response) => {
                 targetUser.role !== UserRoleEnum.MANAGER &&
                 currentUser.storeId === targetUser.storeId
             ) {
-                canUpdate = true;
                 // Admins cannot change a user's role or store assignment
                 delete updateData.role;
                 delete updateData.storeId;
+                canUpdate = true;
             }
         }
 
@@ -419,10 +524,16 @@ export const updateUser = async (req: Request, res: Response) => {
             );
         }
 
+        // Multi-tenancy enforcement: CRITICAL - Secure the update statement with storeId
         const [updatedUser] = await db
             .update(users)
             .set({ ...updateData, lastModified: new Date() })
-            .where(eq(users.id, targetUserId))
+            .where(
+                and(
+                    eq(users.id, targetUserId),
+                    eq(users.storeId, String(currentUser.storeId)), // <-- CRITICAL FIX: Secure the update statement
+                ),
+            )
             .returning();
 
         // 6. Return the updated user data (without password)
@@ -441,10 +552,10 @@ export const updateUser = async (req: Request, res: Response) => {
 
 /**
  * @desc    Update the current user's password
- * @route   PATCH /api/users/update-password
+ * @route   PATCH /users/update-password
  * @access  Private (for the logged-in user)
  */
-export const updatePassword = async (req: Request, res: Response) => {
+export const updatePassword = async (req: CustomRequest, res: Response) => {
     try {
         const { oldPassword, newPassword } = req.body;
         const currentUser = req.user?.data;
@@ -464,6 +575,15 @@ export const updatePassword = async (req: Request, res: Response) => {
                 StatusCodeEnum.BAD_REQUEST,
             );
         }
+
+        if (oldPassword === newPassword) {
+            return handleError(
+                res,
+                "Old password and new password must be different.",
+                StatusCodeEnum.BAD_REQUEST,
+            );
+        }
+
         if (newPassword.length < 6) {
             return handleError(
                 res,
@@ -596,23 +716,10 @@ export const loginUser = async (
 };
 
 export const logoutUser = async (req: Request, res: Response) => {
-    //    const { user } = req;
-    //
-    //    if (!user) {
-    //        res.status(401).json({ message: "Sorry, you have to login first." });
-    //    }
-
-    //    req.logout((error) => {
-    //        if (error) {
-    //            res.status(500).json(error);
-    //        }
-    //
-    //        res.status(200).json({ message: "Logged out successfully" });
-    //    });
     return res.status(StatusCodeEnum.OK).json({ message: "Logout successful" });
 };
 
-export const getUserAccess = async (req: Request, res: Response) => {
+export const getUserAccess = async (req: CustomRequest, res: Response) => {
     try {
         const user = req.user;
 
@@ -624,6 +731,7 @@ export const getUserAccess = async (req: Request, res: Response) => {
             email: user?.data.email,
             phone: user?.data.phone,
             status: user?.data.status,
+            storeId: user?.data.storeId,
             createdAt: user?.data.createdAt,
             lastModified: user?.data.lastModified,
         };
