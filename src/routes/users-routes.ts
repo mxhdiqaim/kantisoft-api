@@ -11,24 +11,19 @@ router.get(
     isAuthorized([UserRoleEnum.MANAGER, UserRoleEnum.ADMIN]),
     controller.getAllUsers,
 );
-router.get(
-    "/:id",
-    isAuthorized([UserRoleEnum.MANAGER, UserRoleEnum.ADMIN]),
-    controller.getUserById,
-);
+router.get("/:id", controller.getUserById);
 router.get("/access", controller.getUserAccess);
 router.post(
     "/create",
-    isAuthorized([UserRoleEnum.MANAGER, UserRoleEnum.ADMIN]),
+    isAuthorized([UserRoleEnum.MANAGER, UserRoleEnum.ADMIN]), // Only Managers/Admins can create users
     controller.createUser,
 );
-// router.post("/login", controller.loginUser);
-// router.post("/logout", controller.logoutUser);
+
 router.patch("/:id", controller.updateUser);
 
 router.delete(
     "/:id",
-    isAuthorized([UserRoleEnum.MANAGER, UserRoleEnum.ADMIN]),
+    isAuthorized([UserRoleEnum.MANAGER, UserRoleEnum.ADMIN]), // Only Managers/Admins can delete users
     controller.deleteUser,
 );
 

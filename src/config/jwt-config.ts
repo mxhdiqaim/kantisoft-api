@@ -8,16 +8,6 @@ import { UserStatusEnum } from "../types/enums";
 import { AuthUserT } from "./auth-config";
 import passport from "passport";
 
-// Define the JWT payload structure
-// interface JwtPayload {
-//     id: string;
-//     email: string;
-//     role: string;
-//     firstName: string;
-//     lastName: string;
-//     phone: string;
-// }
-
 const JWT_SECRET = process.env.JWT_SECRET;
 
 if (!JWT_SECRET) {
@@ -33,7 +23,21 @@ export const generateToken = (user: UserSchemaT) => {
     if (!user || !user.id) {
         return null;
     }
-    return jwt.sign({ id: user.id, role: user.role }, JWT_SECRET, {
+
+    const userData = {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        phone: user.phone,
+        role: user.role,
+        status: user.status,
+        storeId: user.storeId,
+        // createdAt: user.createdAt,
+        // lastModified: user.lastModified,
+    };
+
+    return jwt.sign(userData, JWT_SECRET, {
         expiresIn: "1d",
     });
 };
@@ -75,50 +79,3 @@ passport.use(
 
 // This is your main authentication middleware for protected routes.
 export const protectedRoute = passport.authenticate("jwt", { session: false });
-
-// /**
-//  * Middleware to protect routes by verifying a JWT.
-//  * It checks for a token in the Authorisation header, verifies it,
-//  * and attaches the decoded user payload to the request object.
-//  * @param req - The Express request object.
-//  * @param res - The Express response object.
-//  * @param next - The next middleware function.
-//  */
-// export const protectedRoute = async (
-//     req: Request,
-//     res: Response,
-//     next: NextFunction,
-// ) => {
-//     const authHeader = req.headers.authorization;
-
-//     if (authHeader && authHeader.startsWith("Bearer ")) {
-//         const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-
-//         try {
-//             const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
-
-//             // Fetch the user from the database to get the latest data
-//             const currentUser = await db.query.users.findFirst({
-//                 where: eq(users.id, decoded.id),
-//             });
-
-//             if (!currentUser) {
-//                 return res
-//                     .status(401)
-//                     .json({ message: "Not authorized, user not found" });
-//             }
-
-//             // Correctly structure req.user to match the application's type definition
-//             req.user = { data: currentUser };
-
-//             next();
-//             // eslint-disable-next-line @typescript-eslint/no-unused-vars
-//         } catch (error) {
-//             return res
-//                 .status(401)
-//                 .json({ message: "Not authorized, token failed" });
-//         }
-//     } else {
-//         res.status(401).json({ message: "Not authorized, no token" });
-//     }
-// };

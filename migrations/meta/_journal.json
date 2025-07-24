@@ -85,6 +85,20 @@
       "when": 1753201687777,
       "tag": "0011_demonic_clint_barton",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1753376492517,
+      "tag": "0012_good_cobalt_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1753381472219,
+      "tag": "0013_mighty_otto_octavius",
+      "breakpoints": true
     }
   ]
 }

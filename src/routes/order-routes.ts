@@ -7,7 +7,7 @@ router.get("/", controller.getAllOrders);
 router.get("/by-period", controller.getOrdersByPeriod);
 router.get("/:id", controller.getOrderById);
 router.post("/create", controller.createOrder);
-router.put("/:id", controller.updateOrderStatus);
+router.patch("/:id", controller.updateOrderStatus);
 router.delete("/:id", controller.deleteOrder);
 
 export = router;

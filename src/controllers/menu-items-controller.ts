@@ -1,23 +1,28 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import { Request, Response } from "express";
 import db from "../db";
 import { menuItems } from "../schema/menu-items-schema";
 import { generateUniqueItemCode } from "../utils/generate-unique-item-code";
 import { handleError } from "../service/error-handling";
-import { StatusCodeEnum, UserRoleEnum } from "../types/enums";
+import { StatusCodeEnum } from "../types/enums";
+import { CustomRequest } from "../types/express";
 
 // Get all menu items
-export const getAllMenuItems = async (req: Request, res: Response) => {
+export const getAllMenuItems = async (req: CustomRequest, res: Response) => {
     try {
-        const userStoreId = (req as any).userStoreId; // Get storeId from middleware
-        // If userStoreId exists, all queries are scoped to that store.
-        const whereClause = userStoreId
-            ? eq(menuItems.storeId, userStoreId)
-            : undefined;
+        const userStoreId = req.userStoreId; // Get storeId from middleware
+
+        if (!userStoreId) {
+            return handleError(
+                res,
+                "You must be associated with a store to view menu items.",
+                StatusCodeEnum.FORBIDDEN,
+            );
+        }
 
         const allMenuItems = await db.query.menuItems.findMany({
-            where: whereClause,
+            where: eq(menuItems.storeId, userStoreId), // Always filter by storeId
             orderBy: [desc(menuItems.createdAt)],
             with: { store: { columns: { name: true } } },
         });
@@ -25,22 +30,34 @@ export const getAllMenuItems = async (req: Request, res: Response) => {
         res.status(StatusCodeEnum.OK).json(allMenuItems);
     } catch (error) {
         console.error(error);
-        handleError(res, "Problem loading menu items, please try again", 500);
+        handleError(
+            res,
+            "Problem loading menu items, please try again",
+            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+        );
     }
 };
 
 // Get a single menu item by ID
-export const getMenuItemById = async (req: Request, res: Response) => {
+export const getMenuItemById = async (req: CustomRequest, res: Response) => {
     try {
         const { id } = req.params;
-        const userStoreId = (req as any).userStoreId;
-        const isManager = req.user?.data.role === UserRoleEnum.MANAGER;
+        const userStoreId = req.userStoreId;
 
-        let whereClause: any = eq(menuItems.id, id);
-
-        if (!isManager && userStoreId) {
-            whereClause = and(whereClause, eq(menuItems.storeId, userStoreId));
+        if (!userStoreId) {
+            return handleError(
+                res,
+                "You must be associated with a store to view menu items.",
+                StatusCodeEnum.FORBIDDEN,
+            );
         }
+
+        // Managers and Admins can view any item within their store.
+        // Users and Guests can also view items within their store.
+        const whereClause = and(
+            eq(menuItems.id, id),
+            eq(menuItems.storeId, userStoreId), // CRITICAL: Always filter by user's storeId
+        );
 
         const menuItem = await db.query.menuItems.findFirst({
             where: whereClause,
@@ -53,16 +70,8 @@ export const getMenuItemById = async (req: Request, res: Response) => {
                 StatusCodeEnum.NOT_FOUND,
             );
         }
-        res.status(StatusCodeEnum.OK).json(menuItem);
 
-        // const menuItem = await db
-        //     .select()
-        //     .from(menuItems)
-        //     .where(eq(menuItems.id, id));
-        // if (menuItem.length === 0) {
-        //     return res.status(404).json({ message: "Menu item not found" });
-        // }
-        // res.status(200).json(menuItem[0]);
+        res.status(StatusCodeEnum.OK).json(menuItem);
     } catch (error) {
         console.error(error);
         return handleError(
@@ -75,29 +84,42 @@ export const getMenuItemById = async (req: Request, res: Response) => {
 
 // Create a new menu item
 export const createMenuItem = async (req: Request, res: Response) => {
-    const {
-        name,
-        price,
-        isAvailable,
-        itemCode: providedItemCode,
-        storeId,
-    } = req.body;
-
-    const user = req.user?.data;
-
     try {
-        // Security check: Admins can only create items for their own store
-        if (user?.role === UserRoleEnum.ADMIN && storeId !== user.storeId) {
+        const {
+            name,
+            price,
+            isAvailable,
+            itemCode: providedItemCode,
+        } = req.body;
+
+        const userStoreId = req.userStoreId;
+
+        if (!userStoreId) {
             return handleError(
                 res,
-                "You can only create menu items for your assigned store.",
+                "Store ID not found for the authenticated user.",
                 StatusCodeEnum.FORBIDDEN,
             );
         }
+
+        // Validate required fields early
+        if (!name || price === undefined) {
+            return handleError(
+                res,
+                "Name and price are required.",
+                StatusCodeEnum.BAD_REQUEST,
+            );
+        }
+
         const existingItemByName = await db
             .select()
             .from(menuItems)
-            .where(eq(menuItems.name, name))
+            .where(
+                and(
+                    eq(menuItems.name, name),
+                    eq(menuItems.storeId, userStoreId), // Filter by current user's storeId
+                ),
+            )
             .limit(1);
 
         if (existingItemByName.length > 0) {
@@ -114,7 +136,12 @@ export const createMenuItem = async (req: Request, res: Response) => {
             const existingItem = await db
                 .select()
                 .from(menuItems)
-                .where(eq(menuItems.itemCode, providedItemCode))
+                .where(
+                    and(
+                        eq(menuItems.itemCode, providedItemCode),
+                        eq(menuItems.storeId, userStoreId), // Filter by current user's storeId
+                    ),
+                )
                 .limit(1);
 
             if (existingItem.length > 0) {
@@ -128,48 +155,72 @@ export const createMenuItem = async (req: Request, res: Response) => {
             finalItemCode = providedItemCode;
         } else {
             // If no itemCode is provided, auto-generate a unique one
-            finalItemCode = await generateUniqueItemCode();
+            // This `generateUniqueItemCode` function should ideally ensure uniqueness globally or per store.
+            // It suppose to be unique globally and human readable. I will come back for it later.
+            finalItemCode = await generateUniqueItemCode(); // Assuming this is robust
         }
 
-        if (!name || price === undefined || !storeId) {
-            return res
-                .status(400)
-                .json({ message: "Name and price are required" });
-        }
-        const newItem = await db
+        const [newItem] = await db
             .insert(menuItems)
             .values({
                 name,
-                price: String(price),
-                isAvailable,
                 itemCode: finalItemCode,
-                storeId,
+                price: String(price),
+                isAvailable: isAvailable ?? true,
+                storeId: userStoreId, // Always use the user's storeId
             })
             .returning();
-        res.status(201).json(newItem[0]);
-    } catch (error) {
+
+        res.status(StatusCodeEnum.CREATED).json(newItem);
+    } catch (error: any) {
         console.error(error);
-        res.status(500).json({
-            message: "Problem creating menu items, please try again.",
-        });
+        // *** Improved error handling for database unique constraint violations ***
+        if (error.cause && error.cause.code === "23505") {
+            // PostgreSQL unique violation error code
+            if (error.cause.constraint === "menuItems_name_store_unique") {
+                return handleError(
+                    res,
+                    "A menu item with this name already exists in your store.",
+                    StatusCodeEnum.CONFLICT,
+                );
+            }
+            if (error.cause.constraint === "menuItems_itemCode_store_unique") {
+                return handleError(
+                    res,
+                    "A menu item with this item code already exists in your store.",
+                    StatusCodeEnum.CONFLICT,
+                );
+            }
+            // If itemCode was globally unique and caused an error
+            if (error.cause.constraint === "menuItems_itemCode_unique") {
+                return handleError(
+                    res,
+                    "A menu item with this item code already exists globally. Please provide a different one.",
+                    StatusCodeEnum.CONFLICT,
+                );
+            }
+        }
+
+        handleError(
+            res,
+            "Problem creating menu items, please try again.",
+            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+        );
     }
 };
 
 // Update a menu item
-export const updateMenuItem = async (req: Request, res: Response) => {
+export const updateMenuItem = async (req: CustomRequest, res: Response) => {
     try {
         const { id } = req.params;
         const { name, price, isAvailable, itemCode } = req.body;
-        const userStoreId = (req as any).userStoreId;
-        const isManager = req.user?.data.role === UserRoleEnum.MANAGER;
+        const userStoreId = req.userStoreId!;
 
-        let findWhereClause: any = eq(menuItems.id, id);
-        if (!isManager && userStoreId) {
-            findWhereClause = and(
-                findWhereClause,
-                eq(menuItems.storeId, userStoreId),
-            );
-        }
+        // CRITICAL: Fetch the item, making sure it belongs to the current user's store.
+        const findWhereClause = and(
+            eq(menuItems.id, id),
+            eq(menuItems.storeId, userStoreId),
+        );
 
         // First, get the current state of the menu item
         const currentItem = await db.query.menuItems.findFirst({
@@ -189,24 +240,68 @@ export const updateMenuItem = async (req: Request, res: Response) => {
             price?: string;
             isAvailable?: boolean;
             itemCode?: string;
+            lastModified?: Date;
         } = {};
 
-        if (name !== undefined) updateData.name = name;
+        if (name !== undefined) {
+            // CRITICAL: Check for uniqueness of updated name within the store
+            if (name !== currentItem.name) {
+                const existingItemWithName = await db.query.menuItems.findFirst(
+                    {
+                        where: and(
+                            eq(menuItems.name, name),
+                            eq(menuItems.storeId, userStoreId),
+                            ne(menuItems.id, id), // Exclude the current item
+                        ),
+                    },
+                );
+                if (existingItemWithName) {
+                    return handleError(
+                        res,
+                        `An item with the name '${name}' already exists in your store.`,
+                        StatusCodeEnum.CONFLICT,
+                    );
+                }
+            }
+            updateData.name = name;
+        }
+
         if (price !== undefined) updateData.price = String(price);
         if (isAvailable !== undefined) updateData.isAvailable = isAvailable;
 
         // If an item code is provided, use it.
         if (itemCode !== undefined) {
+            // CRITICAL: Check for uniqueness of updated itemCode within the store
+            if (itemCode !== currentItem.itemCode) {
+                const existingItemWithCode = await db.query.menuItems.findFirst(
+                    {
+                        where: and(
+                            eq(menuItems.itemCode, itemCode),
+                            eq(menuItems.storeId, userStoreId),
+                            ne(menuItems.id, id), // Exclude the current item
+                        ),
+                    },
+                );
+                if (existingItemWithCode) {
+                    return handleError(
+                        res,
+                        `Item code '${itemCode}' is already in use by another item, create another one or leave it blank to auto-generate.`,
+                        StatusCodeEnum.CONFLICT,
+                    );
+                }
+            }
             updateData.itemCode = itemCode;
         } else if (!currentItem.itemCode) {
             // If no item code is provided AND the item doesn't have one, generate it.
             updateData.itemCode = await generateUniqueItemCode();
         }
 
+        updateData.lastModified = new Date();
+
         if (Object.keys(updateData).length === 0) {
             return handleError(
                 res,
-                "No fields to update provided.",
+                "No valid fields provided for update.",
                 StatusCodeEnum.BAD_REQUEST,
             );
         }
@@ -224,6 +319,7 @@ export const updateMenuItem = async (req: Request, res: Response) => {
                 StatusCodeEnum.NOT_FOUND,
             );
         }
+
         res.status(StatusCodeEnum.OK).json(updatedItem[0]);
     } catch (error) {
         // Handle potential unique constraint errors, e.g., if the new name is already taken
@@ -240,18 +336,31 @@ export const updateMenuItem = async (req: Request, res: Response) => {
 export const deleteMenuItem = async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
-        const userStoreId = (req as any).userStoreId;
-        const isManager = req.user?.data.role === UserRoleEnum.MANAGER;
+        const userStoreId = req.userStoreId;
 
-        let whereClause: any = eq(menuItems.id, id);
-        if (!isManager && userStoreId) {
-            whereClause = and(whereClause, eq(menuItems.storeId, userStoreId));
+        if (!userStoreId) {
+            return handleError(
+                res,
+                "You must be associated with a store to delete menu items.",
+                StatusCodeEnum.FORBIDDEN,
+            );
         }
+
+        // CRITICAL: Ensure the item being deleted belongs to the user's store
+        const whereClause = and(
+            eq(menuItems.id, id),
+            eq(menuItems.storeId, userStoreId),
+        );
+
+        // if (!isManager && userStoreId) {
+        //     whereClause = and(whereClause, eq(menuItems.storeId, userStoreId));
+        // }
 
         const deletedItem = await db
             .delete(menuItems)
             .where(whereClause)
             .returning();
+
         if (deletedItem.length === 0) {
             return res
                 .status(StatusCodeEnum.NOT_FOUND)

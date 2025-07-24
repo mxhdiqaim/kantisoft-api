@@ -11,21 +11,17 @@ import auth from "./auth-routes";
 import { protectedRoute } from "../config/jwt-config";
 import { isManager } from "../middlewares/is-manager-middleware";
 import { checkStoreAccess } from "../middlewares/check-store-access";
-// import { checkOnboarding } from "../middlewares/check-onboarding";
 
 const router = express.Router();
 
 // Public authentication routes
-router.use("/auth", auth);
+router.use("/api", auth); // Handles /api/register, /api/login, /api/logout (logout is protected within auth-routes)
 
 // All subsequent routes are protected
 router.use(protectedRoute);
 
 // User management routes (now fully protected)
 router.use("/users", users);
-
-// Apply onboarding checks globally for the following routes
-// router.use(checkOnboarding);
 
 // Store CRUD is for Managers only
 router.use("/stores", stores);
