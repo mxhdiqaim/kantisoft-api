@@ -5,10 +5,10 @@
     "scripts": {
         "dev": "nodemon",
         "build": "tsc",
-        "start": "node dist/main.js",
+        "start": "node dist/src/main.js",
         "generate": "drizzle-kit generate",
         "migrate": "ts-node src/db/migrate.ts",
-        "migrate:prod": "node dist/db/migrate.js",
+        "migrate:prod": "node dist/src/db/migrate.js",
         "seed": "ts-node src/db/seed.ts",
         "predeploy": "pnpm run migrate:prod"
     },
