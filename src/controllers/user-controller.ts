@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { and, eq, ne, or } from "drizzle-orm";
+import { and, eq, ne, or, SQL } from "drizzle-orm";
 import { NextFunction, Request, Response } from "express";
 import passport from "passport";
 
@@ -38,18 +38,63 @@ export const registerManagerAndStore = async (req: Request, res: Response) => {
             );
         }
 
-        // Check for existing user
+        // Normalize phone input: Convert empty string or undefined to null
+        // This ensures consistent storage (NULL for truly optional/blank) and
+        // allows correct SQL NULL handling in uniqueness checks.
+        const normalizedPhone =
+            phone === "" || phone === undefined ? null : phone;
+
+        // Build the base condition (email is always checked)
+        let whereConditions: SQL<unknown> | undefined = eq(users.email, email);
+
+        // If a non-null phone number is provided, combine with the email condition using 'or'
+        if (normalizedPhone !== null) {
+            whereConditions = or(
+                whereConditions,
+                eq(users.phone, normalizedPhone),
+            );
+        }
+
+        // Check for existing user with either the email OR the provided (non-null) phone
+        // This check is global, as this controller creates the first manager/store
         const existingUser = await db.query.users.findFirst({
-            where: or(eq(users.email, email), eq(users.phone, phone)),
+            where: whereConditions,
         });
 
         if (existingUser) {
-            return handleError(
-                res,
-                "A user with this email or phone number already exists.",
-                StatusCodeEnum.CONFLICT,
-            );
+            // Provide more specific feedback to the user
+            if (existingUser.email === email) {
+                return handleError(
+                    res,
+                    "A user with this email already exists.",
+                    StatusCodeEnum.CONFLICT,
+                );
+            } else if (
+                normalizedPhone !== null &&
+                existingUser.phone === normalizedPhone
+            ) {
+                return handleError(
+                    res,
+                    "A user with this phone number already exists.",
+                    StatusCodeEnum.CONFLICT,
+                );
+            } else {
+                // Fallback for general case or if both match (less likely with specific checks above)
+                return handleError(
+                    res,
+                    "A user with this email or phone number already exists.",
+                    StatusCodeEnum.CONFLICT,
+                );
+            }
         }
+
+        // if (existingUser) {
+        //     return handleError(
+        //         res,
+        //         "A user with this email or phone number already exists.",
+        //         StatusCodeEnum.CONFLICT,
+        //     );
+        // }
 
         // Use a transaction to ensure both user and store are created, or neither.
         const { user, token } = await db.transaction(async (tx) => {
@@ -68,7 +113,7 @@ export const registerManagerAndStore = async (req: Request, res: Response) => {
                     lastName,
                     email,
                     password: hashedPassword,
-                    phone,
+                    phone: normalizedPhone,
                     role: UserRoleEnum.MANAGER, // Automatically a manager
                     status: UserStatusEnum.ACTIVE,
                     storeId: newStore.id, // Link to the new store
@@ -89,8 +134,40 @@ export const registerManagerAndStore = async (req: Request, res: Response) => {
             user: userWithoutPassword,
             token,
         });
-    } catch (error) {
+    } catch (error: any) {
         console.error("Registration Error:", error);
+        // CRITICAL FIX: Add more specific error handling for unique constraints.
+        // If the database constraint (e.g., users_storeId_phone_unique) is violated,
+        // Drizzle might throw an error with a specific code/constraint name.
+        if (
+            error.cause &&
+            typeof error.cause === "object" &&
+            "code" in error.cause &&
+            error.cause.code === "23505"
+        ) {
+            if ("constraint" in error.cause) {
+                switch (error.cause.constraint) {
+                    case "users_email_unique": // If you have a global unique email constraint
+                        return handleError(
+                            res,
+                            "A user with this email already exists globally.",
+                            StatusCodeEnum.CONFLICT,
+                        );
+                    case "users_storeId_email_unique": // Your storeId, email unique constraint
+                        return handleError(
+                            res,
+                            "A user with this email already exists within a store.",
+                            StatusCodeEnum.CONFLICT,
+                        );
+                    case "users_storeId_phone_unique": // Your storeId, phone unique constraint
+                        return handleError(
+                            res,
+                            "A user with this phone number already exists within a store.",
+                            StatusCodeEnum.CONFLICT,
+                        );
+                }
+            }
+        }
         handleError(
             res,
             "Registration failed. Please try again.",
