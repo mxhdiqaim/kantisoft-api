@@ -275,15 +275,6 @@ export const createOrder = async (req: CustomRequest, res: Response) => {
             );
         }
 
-        // // Security check: Admins can only create orders for their own store
-        // if (user?.role === UserRoleEnum.ADMIN && storeId !== user.storeId) {
-        //     return handleError(
-        //         res,
-        //         "You can only create orders for your assigned store.",
-        //         StatusCodeEnum.FORBIDDEN,
-        //     );
-        // }
-
         if (!items || !Array.isArray(items) || items.length === 0) {
             return handleError(
                 res,
@@ -309,7 +300,7 @@ export const createOrder = async (req: CustomRequest, res: Response) => {
 
         const menuItemIds: string[] = items.map((item) => item.menuItemId);
 
-        // 1. Verify that all menu items exist and get their current prices
+        // Verify that all menu items exist and get their current prices
         const existingMenuItems = await db
             .select()
             .from(menuItems)
@@ -327,7 +318,7 @@ export const createOrder = async (req: CustomRequest, res: Response) => {
             existingMenuItems.map((item) => [item.id, item.price]),
         );
 
-        // 2. Calculate total price
+        // Calculate total price
         let totalAmount = 0;
         const orderItemsToInsert = items.map((item) => {
             const priceString = priceMap.get(item.menuItemId);
@@ -348,7 +339,7 @@ export const createOrder = async (req: CustomRequest, res: Response) => {
             };
         });
 
-        // 3. Create the order and the order items within a transaction
+        // Create the order and the order items within a transaction
         const newOrder = await db.transaction(async (tx) => {
             const orderReference = generateOrderReference();
 
@@ -453,12 +444,6 @@ export const updateOrderStatus = async (req: CustomRequest, res: Response) => {
             );
         }
 
-        // let whereClause: any = eq(orders.id, id);
-
-        // if (!isManager && userStoreId) {
-        //     whereClause = and(whereClause, eq(orders.storeId, userStoreId));
-        // }
-
         // Add the condition that the order must be 'pending' to be updated
         const whereClause = and(
             eq(orders.id, id),
@@ -480,6 +465,16 @@ export const updateOrderStatus = async (req: CustomRequest, res: Response) => {
             );
         }
 
+        // Log activity for order status update
+        await logActivity({
+            userId: req.user?.data.id,
+            storeId: userStoreId,
+            action: "ORDER_STATUS_UPDATED",
+            entityId: updatedOrder[0].id,
+            entityType: "order",
+            details: `Order status updated to "${orderStatus}" by ${req.user?.data.firstName} ${req.user?.data.lastName}.`,
+        });
+
         res.status(StatusCodeEnum.OK).json(updatedOrder[0]);
     } catch (error) {
         console.error(error);
@@ -496,8 +491,6 @@ export const deleteOrder = async (req: CustomRequest, res: Response) => {
     try {
         const { id } = req.params;
         const userStoreId = req.userStoreId;
-        // const userStoreId = req.userStoreId;
-        // const isManager = req.user?.data.role === UserRoleEnum.MANAGER;
 
         if (!userStoreId) {
             return handleError(
@@ -506,11 +499,6 @@ export const deleteOrder = async (req: CustomRequest, res: Response) => {
                 StatusCodeEnum.UNAUTHORIZED,
             );
         }
-
-        // let whereClause: any = eq(orders.id, id);
-        // if (!isManager && userStoreId) {
-        //     whereClause = and(whereClause, eq(orders.storeId, userStoreId));
-        // }
 
         // Add the condition that the order must be 'pending' to be deleted
         const whereClause = and(
@@ -532,6 +520,17 @@ export const deleteOrder = async (req: CustomRequest, res: Response) => {
                 StatusCodeEnum.NOT_FOUND,
             );
         }
+
+        // Log activity for order deletion
+        await logActivity({
+            userId: req.user?.data.id,
+            storeId: userStoreId,
+            action: "ORDER_DELETED",
+            entityId: deletedOrder[0].id,
+            entityType: "order",
+            details: `Order with reference ${deletedOrder[0].reference} deleted by ${req.user?.data.firstName} ${req.user?.data.lastName}.`,
+        });
+
         res.status(StatusCodeEnum.OK).json({
             message: "Order deleted successfully",
         });
