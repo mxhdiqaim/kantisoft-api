@@ -753,15 +753,15 @@ export const updatePassword = async (req: CustomRequest, res: Response) => {
             .set({ password: hashedNewPassword, lastModified: new Date() })
             .where(eq(users.id, currentUser.id));
 
-        // // Log activity for password change
-        // await logActivity({
-        //     userId: currentUser.id,
-        //     storeId: String(currentUser.storeId),
-        //     action: "PASSWORD_CHANGED",
-        //     entityId: currentUser.id,
-        //     entityType: "user",
-        //     details: `Password changed by ${currentUser.firstName} ${currentUser.lastName}.`,
-        // });
+        // Log activity for password change
+        await logActivity({
+            userId: currentUser.id,
+            storeId: String(currentUser.storeId),
+            action: "PASSWORD_CHANGED",
+            entityId: currentUser.id,
+            entityType: "user",
+            details: `Password changed by ${currentUser.firstName} ${currentUser.lastName}.`,
+        });
 
         res.status(StatusCodeEnum.OK).json({
             message: "Password updated successfully.",

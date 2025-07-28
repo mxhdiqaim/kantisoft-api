@@ -20,6 +20,7 @@ router.post(
 );
 
 router.patch("/:id", controller.updateUser);
+router.patch("/update-password", controller.updatePassword);
 
 router.delete(
     "/:id",
