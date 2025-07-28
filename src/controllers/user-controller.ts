@@ -11,6 +11,7 @@ import { passwordHashService } from "../service/password-hash-service";
 import { StatusCodeEnum, UserRoleEnum, UserStatusEnum } from "../types/enums";
 import { stores } from "../schema/stores-schema";
 import { CustomRequest } from "../types/express";
+import { logActivity } from "../service/activity-logger";
 
 /**
  * @desc    Register a new Manager and their first Store
@@ -88,14 +89,6 @@ export const registerManagerAndStore = async (req: Request, res: Response) => {
             }
         }
 
-        // if (existingUser) {
-        //     return handleError(
-        //         res,
-        //         "A user with this email or phone number already exists.",
-        //         StatusCodeEnum.CONFLICT,
-        //     );
-        // }
-
         // Use a transaction to ensure both user and store are created, or neither.
         const { user, token } = await db.transaction(async (tx) => {
             // Create the store first
@@ -124,6 +117,16 @@ export const registerManagerAndStore = async (req: Request, res: Response) => {
             const token = generateToken(newUser);
 
             return { user: newUser, token };
+        });
+
+        // Log activity for manager registration
+        await logActivity({
+            userId: user.id,
+            storeId: String(user.storeId),
+            action: "MANAGER_REGISTERED",
+            entityId: user.id,
+            entityType: "user",
+            details: `Manager ${user.firstName} ${user.lastName} registered and created store.`,
         });
 
         // Return the new user (without password) and the token
@@ -215,6 +218,13 @@ export const getAllUsers = async (req: CustomRequest, res: Response) => {
             .from(users)
             .where(eq(users.storeId, String(storeId)));
 
+        // await logActivity({
+        //     userId: currentUser.id,
+        //     storeId: storeId,
+        //     action: "USERS_VIEWED",
+        //     details: `All users viewed by ${currentUser.firstName} ${currentUser.lastName}.`,
+        // });
+
         res.status(StatusCodeEnum.OK).json(allUsers);
     } catch (error) {
         console.error("Error fetching all users:", error);
@@ -277,6 +287,16 @@ export const getUserById = async (req: CustomRequest, res: Response) => {
                 StatusCodeEnum.FORBIDDEN,
             );
         }
+
+        // // Log activity for viewing a user
+        // await logActivity({
+        //     userId: currentUser.id,
+        //     storeId: userStoreId,
+        //     action: "USER_VIEWED",
+        //     entityId: targetUser.id,
+        //     entityType: "user",
+        //     details: `User ${targetUser.firstName} ${targetUser.lastName} viewed by ${currentUser.firstName} ${currentUser.lastName}.`,
+        // });
 
         // 5. Return user data without the password
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -367,6 +387,16 @@ export const deleteUser = async (req: CustomRequest, res: Response) => {
                     eq(users.storeId, String(currentUser.storeId)), // <-- CRITICAL FIX: Add multi-tenancy filter
                 ),
             );
+
+        // Log activity for user deletion
+        await logActivity({
+            userId: currentUser.id,
+            storeId: String(currentUser.storeId),
+            action: "USER_DELETED",
+            entityId: targetUserId,
+            entityType: "user",
+            details: `User ${targetUser.firstName} ${targetUser.lastName} deleted by ${currentUser.firstName} ${currentUser.lastName}.`,
+        });
 
         res.status(StatusCodeEnum.OK).json({
             message: "User account has been successfully deleted.",
@@ -481,6 +511,16 @@ export const createUser = async (req: CustomRequest, res: Response) => {
             .insert(users)
             .values(newUserToInsert)
             .returning();
+
+        // Log the activity
+        await logActivity({
+            userId: currentUser.id,
+            storeId: storeId,
+            action: "USER_CREATED",
+            entityId: newUser.id,
+            entityType: "user",
+            details: `User ${newUser.firstName} ${newUser.lastName} (${newUser.role}) created by ${currentUser.firstName} ${currentUser.lastName}.`,
+        });
 
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { password, ...userWithoutPassword } = newUser;
@@ -613,7 +653,17 @@ export const updateUser = async (req: CustomRequest, res: Response) => {
             )
             .returning();
 
-        // 6. Return the updated user data (without password)
+        // Log activity for user update
+        await logActivity({
+            userId: currentUser.id,
+            storeId: String(currentUser.storeId),
+            action: "USER_UPDATED",
+            entityId: targetUserId,
+            entityType: "user",
+            details: `User ${targetUser.firstName} ${targetUser.lastName} updated by ${currentUser.firstName} ${currentUser.lastName}.`,
+        });
+
+        // Return the updated user data (without password)
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { password, ...userWithoutPassword } = updatedUser;
         res.status(StatusCodeEnum.OK).json(userWithoutPassword);
@@ -702,6 +752,16 @@ export const updatePassword = async (req: CustomRequest, res: Response) => {
             .update(users)
             .set({ password: hashedNewPassword, lastModified: new Date() })
             .where(eq(users.id, currentUser.id));
+
+        // // Log activity for password change
+        // await logActivity({
+        //     userId: currentUser.id,
+        //     storeId: String(currentUser.storeId),
+        //     action: "PASSWORD_CHANGED",
+        //     entityId: currentUser.id,
+        //     entityType: "user",
+        //     details: `Password changed by ${currentUser.firstName} ${currentUser.lastName}.`,
+        // });
 
         res.status(StatusCodeEnum.OK).json({
             message: "Password updated successfully.",

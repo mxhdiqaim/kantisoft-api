@@ -7,6 +7,7 @@ import { generateUniqueItemCode } from "../utils/generate-unique-item-code";
 import { handleError } from "../service/error-handling";
 import { StatusCodeEnum } from "../types/enums";
 import { CustomRequest } from "../types/express";
+import { logActivity } from "../service/activity-logger";
 
 // Get all menu items
 export const getAllMenuItems = async (req: CustomRequest, res: Response) => {
@@ -171,6 +172,16 @@ export const createMenuItem = async (req: Request, res: Response) => {
             })
             .returning();
 
+        // Log activity for menu item creation
+        await logActivity({
+            userId: req.user?.data.id,
+            storeId: userStoreId,
+            action: "MENU_ITEM_CREATED",
+            entityId: newItem.id,
+            entityType: "menuItem",
+            details: `Menu item "${newItem.name}" created by ${req.user?.data.firstName} ${req.user?.data.lastName}.`,
+        });
+
         res.status(StatusCodeEnum.CREATED).json(newItem);
     } catch (error: any) {
         console.error(error);
@@ -320,6 +331,16 @@ export const updateMenuItem = async (req: CustomRequest, res: Response) => {
             );
         }
 
+        // Log activity for menu item update
+        await logActivity({
+            userId: req.user?.data.id,
+            storeId: userStoreId,
+            action: "MENU_ITEM_UPDATED",
+            entityId: updatedItem[0].id,
+            entityType: "menuItem",
+            details: `Menu item "${updatedItem[0].name}" updated by ${req.user?.data.firstName} ${req.user?.data.lastName}.`,
+        });
+
         res.status(StatusCodeEnum.OK).json(updatedItem[0]);
     } catch (error) {
         // Handle potential unique constraint errors, e.g., if the new name is already taken
@@ -366,6 +387,17 @@ export const deleteMenuItem = async (req: Request, res: Response) => {
                 .status(StatusCodeEnum.NOT_FOUND)
                 .json({ message: "Menu item not found" });
         }
+
+        // Log activity for menu item deletion
+        await logActivity({
+            userId: req.user?.data.id,
+            storeId: userStoreId,
+            action: "MENU_ITEM_DELETED",
+            entityId: deletedItem[0].id,
+            entityType: "menuItem",
+            details: `Menu item "${deletedItem[0].name}" deleted by ${req.user?.data.firstName} ${req.user?.data.lastName}.`,
+        });
+
         res.status(StatusCodeEnum.OK).json({
             message: "Menu item deleted successfully",
         });

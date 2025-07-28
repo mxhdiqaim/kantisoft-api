@@ -9,8 +9,9 @@ import activities from "./activity-routes";
 import auth from "./auth-routes";
 
 import { protectedRoute } from "../config/jwt-config";
-import { isManager } from "../middlewares/is-manager-middleware";
 import { checkStoreAccess } from "../middlewares/check-store-access";
+import { isAuthorized } from "../middlewares/is-authorised-middleware";
+import { UserRoleEnum } from "../types/enums";
 
 const router = express.Router();
 
@@ -26,8 +27,12 @@ router.use("/users", users);
 // Store CRUD is for Managers only
 router.use("/stores", stores);
 
-// Activity log is for Managers only
-router.use("/activities", isManager, activities);
+// Activity log is for Managers & admin only
+router.use(
+    "/activities",
+    isAuthorized([UserRoleEnum.MANAGER, UserRoleEnum.ADMIN]),
+    activities,
+);
 
 // These routes need to be protected and scoped to the user's store
 router.use("/menu-items", checkStoreAccess, menuItems);

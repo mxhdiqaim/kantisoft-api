@@ -4,6 +4,7 @@ import { stores } from "../schema/stores-schema";
 import { and, eq, or } from "drizzle-orm";
 import { handleError } from "../service/error-handling";
 import { StatusCodeEnum } from "../types/enums";
+import { logActivity } from "../service/activity-logger";
 
 export const getAllStores = async (req: Request, res: Response) => {
     try {
@@ -27,6 +28,14 @@ export const getAllStores = async (req: Request, res: Response) => {
                 branches: true, // Include all child stores (branches)
             },
         });
+
+        // // Log activity for viewing a stores
+        // await logActivity({
+        //     userId: currentUser.id,
+        //     storeId: String(storeId),
+        //     action: "STORES_VIEWED",
+        //     details: `All stores viewed by ${currentUser.firstName} ${currentUser.lastName}.`,
+        // });
         res.status(StatusCodeEnum.OK).json(allStores);
     } catch (error) {
         console.log("error", error);
@@ -77,6 +86,16 @@ export const getStoreById = async (req: Request, res: Response) => {
             );
         }
 
+        // // Log activity for viewing a store
+        // await logActivity({
+        //     userId: currentUser.id,
+        //     storeId: userStoreId,
+        //     action: "STORE_VIEWED",
+        //     entityId: store.id,
+        //     entityType: "store",
+        //     details: `Store "${store.name}" viewed by ${currentUser.firstName} ${currentUser.lastName}.`,
+        // });
+
         res.status(StatusCodeEnum.OK).json(store);
     } catch (error) {
         console.log("error", error);
@@ -105,28 +124,20 @@ export const createStore = async (req: Request, res: Response) => {
         // Assign the new store's parentId to be the current user's storeId
         const storeParentId = currentUser.storeId;
 
-        // const newStore = await db.transaction(async (tx) => {
-        //     // Create the new store
-        //     const [insertedStore] = await tx
-        //         .insert(stores)
-        //         .values({ name, location, storeType, storeParentId })
-        //         .returning();
-
-        //     // If the creator is a manager without a store, assign them to this new store.
-        //     if (currentUser && !currentUser.storeId) {
-        //         await tx
-        //             .update(users)
-        //             .set({ storeId: insertedStore.id })
-        //             .where(eq(users.id, currentUser.id));
-        //     }
-
-        //     return insertedStore;
-        // });
-
         const [newStore] = await db
             .insert(stores)
             .values({ name, location, storeType, storeParentId })
             .returning();
+
+        // Log activity for store creation
+        await logActivity({
+            userId: currentUser.id,
+            storeId: storeParentId,
+            action: "STORE_CREATED",
+            entityId: newStore.id,
+            entityType: "store",
+            details: `Store "${newStore.name}" created by ${currentUser.firstName} ${currentUser.lastName}.`,
+        });
 
         res.status(StatusCodeEnum.CREATED).json(newStore);
     } catch (error) {
@@ -191,6 +202,16 @@ export const updateStore = async (req: Request, res: Response) => {
                 StatusCodeEnum.NOT_FOUND,
             );
         }
+
+        // Log activity for store update
+        await logActivity({
+            userId: currentUser.id,
+            storeId: userStoreId,
+            action: "STORE_UPDATED",
+            entityId: updatedStore.id,
+            entityType: "store",
+            details: `Store "${updatedStore.name}" updated by ${currentUser.firstName} ${currentUser.lastName}.`,
+        });
 
         res.status(StatusCodeEnum.OK).json(updatedStore);
     } catch (error) {
@@ -265,6 +286,17 @@ export const deleteStore = async (req: Request, res: Response) => {
                 StatusCodeEnum.NOT_FOUND,
             );
         }
+
+        // Log activity for store deletion
+        await logActivity({
+            userId: currentUser.id,
+            storeId: userStoreId,
+            action: "STORE_DELETED",
+            entityId: deletedStore.id,
+            entityType: "store",
+            details: `Store "${deletedStore.name}" deleted by ${currentUser.firstName} ${currentUser.lastName}.`,
+        });
+
         res.status(StatusCodeEnum.OK).json({
             message: "Store deleted successfully.",
         });
