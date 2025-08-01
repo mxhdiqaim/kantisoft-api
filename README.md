@@ -1,4 +1,4 @@
-# Restaurant POS API
+# Store POS API
 
 A modern, multi-tenant RESTful API for store (restaurant) Point-of-Sale (POS) systems.
 Supports seamless onboarding, store and branch management, user roles, menu items/products, orders, and robust activity logging.
@@ -133,11 +133,11 @@ The API will be available at `http://localhost:{PORT}` (or your configured port)
 
 Pull requests are welcome! For major changes, please open an issue first to discuss what you would like to change.
 
----
+<!-- ---
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) -->
 
 ---
 
