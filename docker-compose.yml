@@ -1,0 +1,38 @@
+version: "3.8"
+
+services:
+    api:
+        build: .
+        ports:
+            - "5473:5473"
+        environment:
+            NODE_ENV: development
+            PORT: 5473
+            DB_HOST: db
+            DB_PORT: 5432
+            DB_USER: user
+            DB_PASSWORD: password
+            DB_NAME: kantiga
+            DATABASE_URL: postgresql://user:password@db:5432/kantiga
+            JWT_SECRET: "your-secret-key"
+            SESSION_SECRET: "your-session-secret"
+        depends_on:
+            - db
+        volumes:
+            - .:/usr/src/app
+            - /usr/src/app/node_modules
+        command: pnpm run dev
+
+    db:
+        image: postgres:13
+        environment:
+            POSTGRES_USER: user
+            POSTGRES_PASSWORD: password
+            POSTGRES_DB: kantiga
+        ports:
+            - "5432:5432"
+        volumes:
+            - postgres_data:/var/lib/postgresql/data
+
+volumes:
+    postgres_data:
