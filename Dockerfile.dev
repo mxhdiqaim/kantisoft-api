@@ -10,5 +10,14 @@ COPY package.json pnpm-lock.yaml ./
 # Install all dependencies for development
 RUN pnpm install
 
+# Copy the entrypoint script into the container
+COPY entrypoint.sh .
+
+# Make the entrypoint script executable
+RUN chmod +x entrypoint.sh
+
 # Expose the port for the development server
 EXPOSE 5473
+
+# The entrypoint will be used as the command
+ENTRYPOINT ["./entrypoint.sh"]
