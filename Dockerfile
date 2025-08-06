@@ -1,26 +1,41 @@
-# Use the official Node.js 20 image as a parent image
-FROM node:20-alpine
+# Stage 1 Build env
+FROM node:20-alpine AS Build
 
-# Set the working directory in the container
+# working dir
 WORKDIR /usr/src/app
 
-# Copy package.json and pnpm-lock.yaml to the working directory
+# Enable corepack, this allow using pnpm
+RUN corepack enable
+
+# Copy package.json and pnpm-lock.yaml for dep installation
 COPY package.json pnpm-lock.yaml ./
 
-# Install pnpm
-RUN npm install -g pnpm
-
-# Install dependencies using pnpm
+# Install all dependencies (including devDep for building)
 RUN pnpm install
 
-# Copy the rest of the application's source code to the working directory
 COPY . .
 
-# Build the TypeScript code
+# Build the TypeScript code into a /dist dir
 RUN pnpm run build
 
-# Expose the port the app runs on
+# Stage 2 Production Runtime env
+# Use a much smaller Node.js image to run the application
+FROM node:20-alpine AS serve
+
+WORKDIR /usr/src/app
+
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml ./
+
+# Install only production dep
+RUN pnpm install --prod --frozen-lockfile
+
+# Copy the built application files from the 'build' stage
+COPY --from=Build /usr/src/app/dist ./dist
+
+# Expose running port
 EXPOSE 5473
 
-# Define the command to run the application
+# Define the command to run the production application
 CMD ["pnpm", "start"]

@@ -1,0 +1,14 @@
+FROM node:20-alpine
+
+WORKDIR /usr/src/app
+
+RUN corepack enable
+
+# Copy package.json and pnpm-lock.yaml
+COPY package.json pnpm-lock.yaml ./
+
+# Install all dependencies for development
+RUN pnpm install
+
+# Expose the port for the development server
+EXPOSE 5473

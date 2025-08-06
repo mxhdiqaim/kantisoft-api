@@ -1,38 +1,35 @@
 version: "3.8"
 
 services:
-    api:
-        build: .
-        ports:
-            - "5473:5473"
-        environment:
-            NODE_ENV: development
-            PORT: 5473
-            DB_HOST: db
-            DB_PORT: 5432
-            DB_USER: user
-            DB_PASSWORD: password
-            DB_NAME: kantiga
-            DATABASE_URL: postgresql://user:password@db:5432/kantiga
-            JWT_SECRET: "your-secret-key"
-            SESSION_SECRET: "your-session-secret"
-        depends_on:
-            - db
-        volumes:
-            - .:/usr/src/app
-            - /usr/src/app/node_modules
-        command: pnpm run dev
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: kantisoft-api-dev
+    ports:
+      - "${PORT}:${PORT}"
+    environment:
+      DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
+    env_file:
+      - .env
+    depends_on:
+      - postgres_db
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    command: pnpm run dev
 
-    db:
-        image: postgres:13
-        environment:
-            POSTGRES_USER: user
-            POSTGRES_PASSWORD: password
-            POSTGRES_DB: kantiga
-        ports:
-            - "5432:5432"
-        volumes:
-            - postgres_data:/var/lib/postgresql/data
+  postgres_db:
+    image: postgres:16-alpine
+    container_name: kantisoft-db-dev
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports:
+      - "${DB_PORT}:${DB_PORT}"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
 
 volumes:
-    postgres_data:
+  postgres_data:
