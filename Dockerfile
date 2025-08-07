@@ -37,6 +37,10 @@ RUN pnpm install --prod --frozen-lockfile
 # Copy the built application files from the 'build' stage
 COPY --from=Build /usr/src/app/dist ./dist
 
+# Copy the migrations folder from the 'build' stage
+COPY --from=Build /usr/src/app/migrations ./migrations
+
+
 # Copy the prod entrypoint script into the container
 COPY entrypoint.prod.sh .
 
