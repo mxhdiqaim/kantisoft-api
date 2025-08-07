@@ -9,15 +9,12 @@ done
 
 echo "Database is ready. Running migrations..."
 
-# Run database generation
-pnpm run generate
-
 # Run database migrations
 pnpm run migrate
 
 ## Run database seeds
 #pnpm run seed
 
-# Finally, run the main application command
-echo "Migrations and seeds complete. Starting the API server..."
-pnpm run dev
+echo "Migrations complete. Starting the API server..."
+
+exec pnpm run dev

@@ -37,8 +37,15 @@ RUN pnpm install --prod --frozen-lockfile
 # Copy the built application files from the 'build' stage
 COPY --from=Build /usr/src/app/dist ./dist
 
+# Copy the prod entrypoint script into the container
+COPY entrypoint.prod.sh .
+
+# Make the prod entrypoint script executable
+RUN chmod +x entrypoint.prod.sh
+
+
 # Expose running port
 EXPOSE 5473
 
 # Define the command to run the production application
-CMD ["./entrypoint.sh"]
+CMD ["./entrypoint.prod.sh"]
