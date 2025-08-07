@@ -1,11 +1,12 @@
-# Kantiga API
+# Kantisoft API
 
-A modern Point of Sale (POS) backend for stores & restaurants, built with Nodejs, Express, PostgresSQL & Drizzle-ORM.
+A modern Point of Sale (POS) backend for stores and restaurants, built with Nodejs, Express, PostgresSQL & Drizzle-ORM.
 
 ## About
 
 A modern, multi-tenant RESTful API for store (restaurant) Point-of-Sale (POS) systems.
-Supports seamless onboarding, store and branch management, user roles, menu items/products, orders, and robust activity logging.
+Supports seamless onboarding, store and branch management, user roles, menu items/products, orders, and robust activity
+logging.
 
 ---
 

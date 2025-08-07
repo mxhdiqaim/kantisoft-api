@@ -1,0 +1,26 @@
+# Ignore Node.js build and cache directories
+node_modules
+npm-debug.log
+.pnpm-store
+
+# TypeScript build output
+dist/
+
+# Ignore local environment files
+.env
+.env.prod
+.env.example
+.env.*
+
+# Nodemon configuration
+nodemon.json
+
+# Docker files
+Dockerfile
+docker-compose.yml
+
+# Logs
+*.log
+
+# Drizzle studio
+drizzle-studio.config.json

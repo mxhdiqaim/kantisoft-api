@@ -10,4 +10,6 @@ const migrateDB = async () => {
     console.log("Migration done");
 };
 
-migrateDB().then(r => console.log(r)).catch(e => console.error(e));
+migrateDB()
+    .then((r) => console.log(r))
+    .catch((e) => console.error(e));
