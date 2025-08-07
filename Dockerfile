@@ -26,6 +26,9 @@ WORKDIR /usr/src/app
 
 RUN corepack enable
 
+# Install PostgreSQL client tools for pg_isready
+RUN apk add postgresql-client
+
 COPY package.json pnpm-lock.yaml ./
 
 # Install only production dep
@@ -38,4 +41,4 @@ COPY --from=Build /usr/src/app/dist ./dist
 EXPOSE 5473
 
 # Define the command to run the production application
-CMD ["pnpm", "start"]
+CMD ["./entrypoint.sh"]
