@@ -1,17 +1,19 @@
 import "dotenv/config";
-import * as db  from "./src/db"
+import * as db from "./src/db";
 
 (async () => {
     await db
         .connect()
         .then(() => console.log("Database connection has been established"))
-        .catch((err) => console.error("Failed to connect to the database", err));
+        .catch((err) =>
+            console.error("Failed to connect to the database", err),
+        );
 
     const port = parseInt(process.env.PORT || "5473");
     const server = (await import("./src/server")).default;
 
     server.on("error", (error: NodeJS.ErrnoException) => {
-        const bind = typeof port === "string" ? "Pipe " + port : "Port " + port;
+        const bind = "Port " + port;
 
         switch (error.code) {
             case "EACCES":
@@ -29,7 +31,8 @@ import * as db  from "./src/db"
 
     server.on("listening", () => {
         const addr = server.address();
-        const bind = typeof addr === "string" ? "pipe " + addr : "port " + addr?.port;
+        const bind =
+            typeof addr === "string" ? "pipe " + addr : "port " + addr?.port;
 
         console.log(`Server has been started and listening on ${bind}`);
     });

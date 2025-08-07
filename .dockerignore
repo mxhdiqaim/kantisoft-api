@@ -1,0 +1,21 @@
+# Node.js dependencies
+node_modules/
+
+# TypeScript build output
+dist/
+
+# Environment variables
+.env
+
+# Nodemon configuration
+nodemon.json
+
+# Docker files
+Dockerfile
+docker-compose.yml
+
+# Logs
+*.log
+
+# Drizzle studio
+drizzle-studio.config.json
