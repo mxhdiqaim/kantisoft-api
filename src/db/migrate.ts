@@ -5,7 +5,7 @@ import db, { pool } from "./index";
 const migrateDB = async () => {
     console.log("Migration start");
     const client = await pool.connect();
-    await migrate(db, { migrationsFolder: "../../migrations" });
+    await migrate(db, { migrationsFolder: "./migrations" });
     client.release(true);
     console.log("Migration done");
 };
