@@ -1,11 +1,16 @@
-# Node.js dependencies
-node_modules/
+# Ignore Node.js build and cache directories
+node_modules
+npm-debug.log
+.pnpm-store
 
 # TypeScript build output
 dist/
 
-# Environment variables
+# Ignore local environment files
 .env
+.env.prod
+.env.example
+.env.*
 
 # Nodemon configuration
 nodemon.json
