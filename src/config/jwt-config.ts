@@ -1,12 +1,11 @@
-// import { NextFunction, Request, Response } from "express";
-import jwt from "jsonwebtoken";
-import db from "../db";
-import { UserSchemaT, users } from "../schema/users-schema";
 import { and, eq, ne } from "drizzle-orm";
-import { Strategy as JwtStrategy, ExtractJwt } from "passport-jwt";
+import jwt from "jsonwebtoken";
+import passport from "passport";
+import { ExtractJwt, Strategy as JwtStrategy } from "passport-jwt";
+import db from "../db";
+import { users, UserSchemaT } from "../schema/users-schema";
 import { UserStatusEnum } from "../types/enums";
 import { AuthUserT } from "./auth-config";
-import passport from "passport";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -33,12 +32,12 @@ export const generateToken = (user: UserSchemaT) => {
         role: user.role,
         status: user.status,
         storeId: user.storeId,
-        // createdAt: user.createdAt,
-        // lastModified: user.lastModified,
+        createdAt: user.createdAt,
+        lastModified: user.lastModified,
     };
 
     return jwt.sign(userData, JWT_SECRET, {
-        expiresIn: "1d",
+        expiresIn: "12h",
     });
 };
 
