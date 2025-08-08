@@ -1,12 +1,12 @@
 // import { NextFunction, Request, Response } from "express";
-import jwt from "jsonwebtoken";
-import db from "../db";
-import { UserSchemaT, users } from "../schema/users-schema";
 import { and, eq, ne } from "drizzle-orm";
-import { Strategy as JwtStrategy, ExtractJwt } from "passport-jwt";
+import jwt from "jsonwebtoken";
+import passport from "passport";
+import { ExtractJwt, Strategy as JwtStrategy } from "passport-jwt";
+import db from "../db";
+import { users, UserSchemaT } from "../schema/users-schema";
 import { UserStatusEnum } from "../types/enums";
 import { AuthUserT } from "./auth-config";
-import passport from "passport";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -64,7 +64,7 @@ passport.use(
 
             if (user) {
                 // User was found and is active. Authentication is successful.
-                const authUser: AuthUserT = { data: user };
+                const authUser: AuthUserT = {data: user};
                 return done(null, authUser);
             } else {
                 // User was not found OR their status is 'deleted'.
@@ -78,4 +78,4 @@ passport.use(
 );
 
 // This is your main authentication middleware for protected routes.
-export const protectedRoute = passport.authenticate("jwt", { session: false });
+export const protectedRoute = passport.authenticate("jwt", {session: false});
