@@ -5,21 +5,38 @@ import morgan from "morgan";
 
 import "./config/auth-config";
 import path from "path";
-// import authorityCheck from "./config/authorise-config";
 import configureSession from "./config/session-config";
+import { createClient } from "redis";
+import RedisStore from "rate-limit-redis";
 
 import routes from "./routes";
 import rateLimit from "express-rate-limit";
+import { getEnvVariable } from "./utils";
 
 const app = express();
+
+const REDIS_PORT = parseInt(getEnvVariable("REDIS_PORT"));
+const REDIS_HOST = getEnvVariable("REDIS_HOST");
+const REDIS_PASSWORD = getEnvVariable("REDIS_PASSWORD");
+
+const redisClient = createClient({
+    url: `redis://${REDIS_HOST}:${REDIS_PORT}`,
+    password: REDIS_PASSWORD,
+});
+
+redisClient.connect().catch(console.error);
 
 // Rate limiter middleware
 const limiter = rateLimit({
     windowMs: 5 * 60 * 1000, // 5 minutes
     max: 100, // limit each IP to 100 requests per windowMs
-    standardHeaders: true, // Return rate limit info in the headers
-    legacyHeaders: false, // Disable the X-RateLimit headers
+    standardHeaders: true,
+    legacyHeaders: false,
     message: "Too many requests from this IP, please try again later.",
+
+    store: new RedisStore({
+        sendCommand: (...args: string[]) => redisClient.sendCommand(args),
+    }),
 });
 
 app.use(limiter);
