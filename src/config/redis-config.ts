@@ -1,12 +1,13 @@
 import Redis from "ioredis";
 import { getEnvVariable } from "../utils";
 
-const REDIS_PORT = parseInt(getEnvVariable("PORT"));
+// const REDIS_PORT = parseInt(getEnvVariable("REDIS_PORT"));
 const REDIS_HOST = getEnvVariable("REDIS_HOST");
 const REDIS_PASSWORD = getEnvVariable("REDIS_PASSWORD");
 
 const redisClient = new Redis({
-    port: REDIS_PORT,
+    // port: REDIS_PORT,
+    port: 6379,
     host: REDIS_HOST || "localhost",
     password: REDIS_PASSWORD || undefined,
     maxRetriesPerRequest: null,

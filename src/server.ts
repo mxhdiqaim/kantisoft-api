@@ -15,12 +15,14 @@ import { getEnvVariable } from "./utils";
 
 const app = express();
 
-const REDIS_PORT = parseInt(getEnvVariable("REDIS_PORT"));
+// const REDIS_PORT = parseInt(getEnvVariable("REDIS_PORT"));
 const REDIS_HOST = getEnvVariable("REDIS_HOST");
 const REDIS_PASSWORD = getEnvVariable("REDIS_PASSWORD");
 
+const INTERNAL_REDIS_PORT = 6379;
+
 const redisClient = createClient({
-    url: `redis://${REDIS_HOST}:${REDIS_PORT}`,
+    url: `redis://${REDIS_HOST}:${INTERNAL_REDIS_PORT}`,
     password: REDIS_PASSWORD,
 });
 

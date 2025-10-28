@@ -17,7 +17,6 @@ services:
       - redis_cache
     volumes:
       - .:/usr/src/app
-      - /usr/src/app/node_modules
   #    command: pnpm run dev
 
   postgres_db:
@@ -28,7 +27,7 @@ services:
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
-      - "5499:${DB_PORT}"
+      - "${DB_PORT}:${DB_PORT}"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -36,8 +35,10 @@ services:
     image: redis:8-alpine
     container_name: kantisoft-redis-dev
     ports:
-      - "${REDIS_PORT}:6379"
-    command: redis-server --appendonly yes
+      - "${REDIS_PORT}:${REDIS_PORT}"
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
     volumes:
       - redis_data:/data
 
