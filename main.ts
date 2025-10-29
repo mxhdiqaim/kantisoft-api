@@ -1,5 +1,10 @@
 import "dotenv/config";
 import * as db from "./src/db";
+import server from "./src/server";
+import { getEnvVariable } from "./src/utils";
+import redisClient from "./src/config/redis-config";
+
+const PORT = parseInt(getEnvVariable("PORT"));
 
 (async () => {
     await db
@@ -9,21 +14,25 @@ import * as db from "./src/db";
             console.error("Failed to connect to the database", err),
         );
 
-    const port = parseInt(process.env.PORT || "5473");
-    const server = (await import("./src/server")).default;
+    try {
+        await redisClient.ping();
+        console.log("Redis connection has been established");
+    } catch (error) {
+        console.error("Failed to connect to Redis", error);
+    }
 
     server.on("error", (error: NodeJS.ErrnoException) => {
-        const bind = "Port " + port;
+        const bind = "Port " + PORT;
 
         switch (error.code) {
             case "EACCES":
                 console.error(bind + " requires elevated privileges");
-                process.exit(1);
-                break;
+                return;
+
             case "EADDRINUSE":
                 console.error(bind + " is already in use");
-                process.exit(1);
-                break;
+
+                return;
             default:
                 console.error(error);
         }
@@ -37,5 +46,5 @@ import * as db from "./src/db";
         console.log(`Server has been started and listening on ${bind}`);
     });
 
-    server.listen(port);
+    server.listen(PORT);
 })();

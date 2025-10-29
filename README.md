@@ -30,17 +30,60 @@ logging.
 
 - [Node.js](https://nodejs.org/) (v18+ recommended)
 - [PostgreSQL](https://www.postgresql.org/) database
+- **Or** [Docker](https://www.docker.com/) and [Docker Compose](https://docs.docker.com/compose/)
 
-### Installation
+### Docker Setup
 
-```bash
-pnpm install
-```
+For a quick and isolated development environment, you can use Docker.
 
-### Database Setup
+1. **Configure Environment Variables:**
+   Create a `.env` file from `.env.example`. The `docker-compose.yml` file will use a service-based hostname to connect
+   to the PostgreSQL container.
 
+   ```bash
+   DB_HOST=postgres
+   DB_PORT=5432
+   DB_USER=some_value
+   DB_PASSWORD=some_value
+   DB_NAME=some_value
+   
+   NODE_ENV=development
+   PORT=some_value
+   JWT_SECRET=some_value
+   SESSION_SECRET=some_value
+   ```
+
+2. **Build and Run the Containers:**
+   This will build the API image and start both the API and the PostgreSQL database containers.
+
+   ```bash
+   docker compose up --build -d
+   ```
+
+3. **(Optional) Seed the Database:**
+   If you have seeding uncommented in your `entrypoint.dev.sh` script, it will also run automatically. Otherwise, you
+   can execute it manually.
+
+   ```bash
+   docker compose exec api pnpm run seed
+   ```
+
+4. **Access the API:**
+   The API will be available at `http://localhost:{PORT}` (or your configured port).
+
+### Installation (Manual)
+
+If you're not using Docker, follow these steps.
+
+1. **Installation:**
+
+   ```bash
+   pnpm install
+   ```
+
+2. **Database Setup:**
 1. Create a PostgreSQL database.
-2. Configure your environment variables in a `.env` file (see `.env.example` if available):
+2. Configure your environment variables in a `.env` file (see `.env.example` if available).
 
     ```bash
     DB_HOST=some_value
@@ -48,7 +91,7 @@ pnpm install
     DB_USER=some_value
     DB_PASSWORD=some_value
     DB_NAME=some_value
-
+    
     NODE_ENV=development
     PORT=some_value
     JWT_SECRET=some_value
