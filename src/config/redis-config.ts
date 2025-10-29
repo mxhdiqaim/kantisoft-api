@@ -7,7 +7,6 @@ const REDIS_PASSWORD = getEnvVariable("REDIS_PASSWORD");
 
 const redisClient = new Redis({
     port: REDIS_PORT,
-    // port: 6379,
     host: REDIS_HOST || "localhost",
     password: REDIS_PASSWORD || undefined,
     maxRetriesPerRequest: null,
