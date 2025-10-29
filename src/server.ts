@@ -2,46 +2,39 @@ import cors from "cors";
 import express from "express";
 import http from "http";
 import morgan from "morgan";
-
 import "./config/auth-config";
 import path from "path";
 import configureSession from "./config/session-config";
-import { createClient } from "redis";
-import RedisStore from "rate-limit-redis";
-
 import routes from "./routes";
-import rateLimit from "express-rate-limit";
 import { getEnvVariable } from "./utils";
+import redisClient from "./config/redis-config";
+import { RedisStore } from "connect-redis";
+import session from "express-session";
+import { apiLimiter } from "./middlewares/rate-limiter";
 
 const app = express();
 
-const REDIS_PORT = parseInt(getEnvVariable("REDIS_PORT") || "6379");
-const REDIS_HOST = getEnvVariable("REDIS_HOST");
-const REDIS_PASSWORD = getEnvVariable("REDIS_PASSWORD");
-
-// const INTERNAL_REDIS_PORT = 6379;
-
-const redisClient = createClient({
-    url: `redis://${REDIS_HOST}:${REDIS_PORT}`,
-    password: REDIS_PASSWORD,
+const redisStore = new RedisStore({
+    client: redisClient,
+    prefix: "sess:", // Optional: Prefixes all session keys in Redis
 });
 
-redisClient.connect().catch(console.error);
-
-// Rate limiter middleware
-const limiter = rateLimit({
-    windowMs: 5 * 60 * 1000, // 5 minutes
-    max: 100, // limit each IP to 100 requests per windowMs
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: "Too many requests from this IP, please try again later.",
-
-    store: new RedisStore({
-        sendCommand: (...args: string[]) => redisClient.sendCommand(args),
+app.use(
+    session({
+        store: redisStore,
+        name: "sid",
+        secret: getEnvVariable("SESSION_SECRET"),
+        resave: false,
+        saveUninitialized: false,
+        cookie: {
+            secure: getEnvVariable("NODE_ENV") === "production",
+            httpOnly: true,
+            maxAge: 1000 * 60 * 60 * 2, // 2 hours
+        },
     }),
-});
+);
 
-app.use(limiter);
+app.use(apiLimiter);
 
 const URL =
     process.env.NODE_ENV === "development"
@@ -77,9 +70,6 @@ app.use((req, res, next) => {
 app.get("/", (_req, res) => {
     res.status(200).json({ message: "API is up and running" });
 });
-
-/* Protect Routes */
-//app.use(authorityCheck);
 
 /** Routes */
 app.use(routes);
