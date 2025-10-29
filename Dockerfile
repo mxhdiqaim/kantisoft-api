@@ -27,7 +27,7 @@ WORKDIR /usr/src/app
 RUN corepack enable
 
 # Install PostgreSQL client tools for pg_isready
-RUN apk add postgresql-client
+RUN apk add postgresql-client netcat-openbsd
 
 COPY package.json pnpm-lock.yaml ./
 
