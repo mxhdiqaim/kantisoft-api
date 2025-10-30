@@ -5,6 +5,7 @@ const REDIS_PORT = parseInt(getEnvVariable("REDIS_PORT") || "6379");
 const REDIS_HOST = getEnvVariable("REDIS_HOST");
 const REDIS_PASSWORD = getEnvVariable("REDIS_PASSWORD");
 
+// init redis client
 const redisClient = new Redis({
     port: REDIS_PORT,
     host: REDIS_HOST || "localhost",
@@ -12,6 +13,7 @@ const redisClient = new Redis({
     maxRetriesPerRequest: null,
 });
 
+// redis client event handlers
 redisClient.on("connect", () => {
     console.log("Redis client connected");
 });
