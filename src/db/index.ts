@@ -32,11 +32,11 @@ if (NODE_ENV === "production") {
 } else {
     // Development/Local environment configuration
     const host = getEnvVariable("DB_HOST");
-    const port = Number(getEnvVariable("DB_PORT"));
+    const port = Number(getEnvVariable("DB_PORT") || "5432");
     const user = getEnvVariable("DB_USER");
     const password = getEnvVariable("DB_PASSWORD");
     const database = getEnvVariable("DB_NAME");
-    
+
     pool = new Pool({
         host,
         port,
