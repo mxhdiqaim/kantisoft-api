@@ -1,14 +1,16 @@
 import "dotenv/config";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
-// import * as schema from "../schema/users-schema";
+import { Pool, PoolConfig } from "pg";
 import schema from "./schema";
+import { getEnvVariable } from "../utils";
 
 export let pool: Pool;
 
 // Conditional Pool configuration based on NODE_ENV
-if (process.env.NODE_ENV === "production") {
-    const connectionString = process.env.DATABASE_URL;
+const NODE_ENV = getEnvVariable("NODE_ENV");
+if (NODE_ENV === "production") {
+    const connectionString = getEnvVariable("DATABASE_URL");
+    const sslRequired = getEnvVariable("DATABASE_SSL_REQUIRED") == "true";
 
     if (!connectionString) {
         throw new Error(
@@ -16,20 +18,31 @@ if (process.env.NODE_ENV === "production") {
         );
     }
 
-    pool = new Pool({
+    const poolConfig: PoolConfig = {
         connectionString: connectionString,
-        ssl: {
-            rejectUnauthorized: false, // Often needed for Render's internal connections
-        },
-    });
+    };
+
+    if (sslRequired) {
+        poolConfig.ssl = {
+            rejectUnauthorized: false, // Often needed for managed DBs
+        };
+    }
+
+    pool = new Pool(poolConfig);
 } else {
     // Development/Local environment configuration
+    const host = getEnvVariable("DB_HOST");
+    const port = Number(getEnvVariable("DB_PORT"));
+    const user = getEnvVariable("DB_USER");
+    const password = getEnvVariable("DB_PASSWORD");
+    const database = getEnvVariable("DB_NAME");
+    
     pool = new Pool({
-        host: process.env.DB_HOST,
-        port: Number(process.env.DB_PORT || "5432"),
-        user: process.env.DB_USER,
-        password: process.env.DB_PASSWORD,
-        database: process.env.DB_NAME,
+        host,
+        port,
+        user,
+        password,
+        database,
     });
 }
 const db = drizzle(pool, { schema });
