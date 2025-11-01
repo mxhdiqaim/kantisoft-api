@@ -11,7 +11,7 @@ on:
 jobs:
   build-and-test:
     name: Build, Lint, and Test
-    runs-on: ubuntu-latest # venv for running the job
+    runs-on: ubuntu-latest # venv for running the jobs
 
     steps:
       - name: Checkout Repository
@@ -23,20 +23,20 @@ jobs:
           node-version: '20'
           cache: 'pnpm'
 
-      - name: Install pnpm
-        run: npm install -g pnpm
+      - name: Enabling Corepack which allow the use of pnpm
+        run: corepack enable
 
-      - name: 📥 Install Dependencies
+      - name: Install Dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: ⚙️ Build Check (tsc)
+      - name: Build Check (tsc)
         # Check if TypeScript code compiles without errors
         run: pnpm run build
 
-      - name: ✅ Run Linting
+      - name: Run Linting
         # Check code style and common errors
         run: pnpm run lint
 
-#      - name: 🧪 Run Unit Tests
+#      - name: Run Unit Tests
 #        # Execute your application's tests
 #        run: pnpm run test
