@@ -1,0 +1,53 @@
+name: CD - Build and Push Docker Image
+
+on:
+  push:
+    branches:
+      - master # Only run the CD job when code is pushed/merged to master branch
+
+env:
+  REGISTRY: ghcr.io # GitHub Container Registry
+  IMAGE_NAME: ${{ github.repository }} # e.g., mxhdiqaim/kantisoft-api
+
+jobs:
+  build-and-push:
+    name: Docker Build & Push
+    runs-on: ubuntu-latest
+
+    # This ensures the CI job passes before CD starts
+    # needs: build-and-test
+
+    permissions:
+      contents: read
+      packages: write # Necessary to push to GHCR
+
+    steps:
+      - name: ⬇️ Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 🏷️ Extract Metadata (Tags)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha,format=long # Tag image with the full commit SHA (e.g., :838b973...)
+            type=raw,value=latest,enable=true # Also tag with :latest
+
+      - name: 🔑 Docker Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }} # GitHub Secret
+          password: ${{ secrets.DOCKER_PASSWORD }} # GitHub Secret (PAT)
+
+      - name: 🏗️ Build and Push Production Image
+        uses: docker/build-and-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile # Use your Dockerfile
+          push: true # Push the image to the registry
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha # Use GitHub Actions caching for faster subsequent builds
+          cache-to: type=gha,mode=max
