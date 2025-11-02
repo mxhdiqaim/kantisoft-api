@@ -1,13 +1,15 @@
 import { rateLimit } from "express-rate-limit";
-import type { RedisReply } from "rate-limit-redis";
+// import type { RedisReply } from "rate-limit-redis";
 import { RedisStore } from "rate-limit-redis";
 import redisClient from "../config/redis-config";
 import { StatusCodes } from "http-status-codes";
 
 const apiStore = new RedisStore({
-    sendCommand: async (command: string, ...args: (string | number)[]) => {
-        return (await redisClient.call(command, ...args)) as RedisReply;
-    },
+    // @ts-expect-error - Known issue: the `call` function is not present in @types/ioredis
+    sendCommand: (...args: string[]) => redisClient.call(...args),
+    // sendCommand: async (command: string, ...args: (string | number)[]) => {
+    //     return (await redisClient.call(command, ...args)) as RedisReply;
+    // },
     prefix: "rl:api:", // Prefix for API limiter
 });
 
