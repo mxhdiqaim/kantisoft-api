@@ -7,37 +7,16 @@ import path from "path";
 import configureSession from "./config/session-config";
 import routes from "./routes";
 import { getEnvVariable } from "./utils";
-import redisClient from "./config/redis-config";
-import { RedisStore } from "connect-redis";
-import session from "express-session";
 import { apiLimiter } from "./middlewares/rate-limiter";
 
 const app = express();
 
-const redisStore = new RedisStore({
-    client: redisClient,
-    prefix: "sess:", // Optional: Prefixes all session keys in Redis
-});
-
-app.use(
-    session({
-        store: redisStore,
-        name: "sid",
-        secret: getEnvVariable("SESSION_SECRET"),
-        resave: false,
-        saveUninitialized: false,
-        cookie: {
-            secure: getEnvVariable("NODE_ENV") === "production",
-            httpOnly: true,
-            maxAge: 1000 * 60 * 60 * 2, // 2 hours
-        },
-    }),
-);
-
 app.use(apiLimiter);
 
+const NODE_ENV = getEnvVariable("NODE_ENV");
+
 const URL =
-    process.env.NODE_ENV === "development"
+    NODE_ENV === "development"
         ? [
               "http://localhost:3000",
               "http://localhost:3001",
