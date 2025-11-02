@@ -14,9 +14,6 @@ importers:
       connect-pg-simple:
         specifier: ^10.0.0
         version: 10.0.0
-      connect-redis:
-        specifier: ^9.0.0
-        version: 9.0.0(express-session@1.18.1)(redis@5.9.0)
       cors:
         specifier: ^2.8.5
         version: 2.8.5
@@ -33,8 +30,8 @@ importers:
         specifier: ^8.0.1
         version: 8.0.1(express@5.1.0)
       express-session:
-        specifier: ^1.18.1
-        version: 1.18.1
+        specifier: ^1.18.2
+        version: 1.18.2
       http-status-codes:
         specifier: ^2.3.0
         version: 2.3.0
@@ -814,13 +811,6 @@ packages:
     resolution: {integrity: sha512-pBGVazlqiMrackzCr0eKhn4LO5trJXsOX0nQoey9wCOayh80MYtThCbq8eoLsjpiWgiok/h+1/uti9/2/Una8A==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=22.0.0}
 
-  connect-redis@9.0.0:
-    resolution: {integrity: sha512-QwzyvUePTMvEzG1hy45gZYw3X3YHrjmEdSkayURlcZft7hqadQ3X39wYkmCqblK2rGlw+XItELYt6GnyG6DEIQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      express-session: '>=1'
-      redis: '>=5'
-
   content-disposition@1.0.0:
     resolution: {integrity: sha512-Au9nRL8VNUut/XSzbQA38+M78dzP4D+eqg3gfJHMIHHYa3bg067xj1KxMUWj+VULbiZMowKngFFbKczUrNJ1mg==}
     engines: {node: '>= 0.6'}
@@ -1083,8 +1073,8 @@ packages:
     peerDependencies:
       express: '>= 4.11'
 
-  express-session@1.18.1:
-    resolution: {integrity: sha512-a5mtTqEaZvBCL9A9aqkrtfz+3SMDhOVUnjafjo+s7A9Txkq+SVX2DLvSp1Zrv4uCXa3lMSK3viWnh9Gg07PBUA==}
+  express-session@1.18.2:
+    resolution: {integrity: sha512-SZjssGQC7TzTs9rpPDuUrR23GNZ9+2+IkA/+IJWmvQilTr5OSliEHGF+D9scbIpdC6yGtTI0/VhaHoVes2AN/A==}
     engines: {node: '>= 0.8.0'}
 
   express@5.1.0:
@@ -1423,6 +1413,10 @@ packages:
 
   on-headers@1.0.2:
     resolution: {integrity: sha512-pZAE+FJLoyITytdqK0U5s+FIpjN0JP3OzFi/u8Rx+EV5/W+JTWGXG8xFzevE7AjBfDqHv/8vL8qQsIhHnqRkrA==}
+    engines: {node: '>= 0.8'}
+
+  on-headers@1.1.0:
+    resolution: {integrity: sha512-737ZY3yNnXy37FHkQxPzt4UZ2UWPWiCZWLvFZ4fu5cueciegX0zGPnrlY6bwRg4FdQOe9YU8MkmJwGhoMybl8A==}
     engines: {node: '>= 0.8'}
 
   once@1.4.0:
@@ -2402,11 +2396,6 @@ snapshots:
     transitivePeerDependencies:
       - pg-native
 
-  connect-redis@9.0.0(express-session@1.18.1)(redis@5.9.0):
-    dependencies:
-      express-session: 1.18.1
-      redis: 5.9.0
-
   content-disposition@1.0.0:
     dependencies:
       safe-buffer: 5.2.1
@@ -2627,13 +2616,13 @@ snapshots:
       express: 5.1.0
       ip-address: 10.0.1
 
-  express-session@1.18.1:
+  express-session@1.18.2:
     dependencies:
       cookie: 0.7.2
       cookie-signature: 1.0.7
       debug: 2.6.9
       depd: 2.0.0
-      on-headers: 1.0.2
+      on-headers: 1.1.0
       parseurl: 1.3.3
       safe-buffer: 5.2.1
       uid-safe: 2.1.5
@@ -2993,6 +2982,8 @@ snapshots:
       ee-first: 1.1.1
 
   on-headers@1.0.2: {}
+
+  on-headers@1.1.0: {}
 
   once@1.4.0:
     dependencies:

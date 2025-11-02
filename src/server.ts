@@ -22,9 +22,7 @@ const URL =
               "http://localhost:3001",
               "http://localhost:8080",
           ]
-        : [
-              `https://${process.env.CLIENT_DOMAIN}` /* `https://${process.env.FORM_DOMAIN}` */,
-          ];
+        : [`https://${process.env.CLIENT_DOMAIN}`];
 
 /** Session */
 configureSession(app);
