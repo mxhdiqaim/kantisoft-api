@@ -14,9 +14,10 @@ echo "Waiting for Redis to be ready..."
 
 # WAIT FOR REDIS
 #until redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" ping | grep PONG;
-until nc -z redis_cache 6379;
+#until nc -z redis_cache 6379;
+until nc -z "$REDIS_HOST" "$REDIS_PORT";
 do
-  echo "redis_cache:6379 - still waiting"
+  echo "Redis at $REDIS_HOST:$REDIS_PORT - still waiting"
   sleep 1
 done
 

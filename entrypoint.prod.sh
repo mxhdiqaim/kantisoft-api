@@ -6,6 +6,11 @@ if [ -z "$DB_HOST" ] || [ -z "$DB_PORT" ] || [ -z "$DB_USER" ]; then
   exit 1
 fi
 
+if [ -z "$REDIS_HOST" ] || [ -z "$REDIS_PORT" ]; then
+  echo "Error: REDIS_HOST or REDIS_PORT environment variables are not set."
+  exit 1
+fi
+
 echo "Waiting for the database at $DB_HOST:$DB_PORT..."
 until pg_isready -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER"; do
   echo "Database is unavailable - sleeping"
