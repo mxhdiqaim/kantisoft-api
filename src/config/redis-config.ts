@@ -13,13 +13,15 @@ const redisClient = new Redis({
     maxRetriesPerRequest: null,
 });
 
-// redis client event handlers
+// Redis client event handlers (only for logging)
 redisClient.on("connect", () => {
-    console.log("Redis client connected");
+    // This confirms connectivity for the user
+    console.log("Redis client connected successfully.");
 });
 
 redisClient.on("error", (err) => {
-    console.error("Redis Connection error: ", err);
+    // This logs connection failure without stopping the server process
+    console.error("Redis Connection error:", err);
 });
 
 export default redisClient;
