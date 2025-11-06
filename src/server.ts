@@ -7,11 +7,8 @@ import path from "path";
 import configureSession from "./config/session-config";
 import routes from "./routes";
 import { getEnvVariable } from "./utils";
-import { apiLimiter } from "./middlewares/rate-limiter";
 
-const app = express();
-
-app.use(apiLimiter);
+export const app = express();
 
 const NODE_ENV = getEnvVariable("NODE_ENV");
 
@@ -43,6 +40,20 @@ app.use(express.json({ limit: "5mb" }));
 app.use((req, res, next) => {
     next();
 });
+
+// Placeholder for rate limiter - will be populated in main.ts
+let rateLimiterMiddleware: any = null;
+
+app.use((req, res, next) => {
+    if (rateLimiterMiddleware) {
+        return rateLimiterMiddleware(req, res, next);
+    }
+    next();
+});
+
+export const setRateLimiter = (limiter: any) => {
+    rateLimiterMiddleware = limiter;
+};
 
 app.get("/", (_req, res) => {
     res.status(200).json({ message: "API is up and running" });

@@ -13,6 +13,7 @@ const configureSession = (app: Express) => {
     const redisStore = new RedisStore({
         client: redisClient,
         prefix: "sess:",
+        serializer: JSON,
     });
 
     app.use(

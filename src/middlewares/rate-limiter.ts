@@ -1,26 +1,36 @@
-import { rateLimit } from "express-rate-limit";
-// import type { RedisReply } from "rate-limit-redis";
+import { rateLimit, RateLimitRequestHandler } from "express-rate-limit";
 import { RedisStore } from "rate-limit-redis";
 import redisClient from "../config/redis-config";
 import { StatusCodes } from "http-status-codes";
 
-const apiStore = new RedisStore({
-    // @ts-expect-error - Known issue: the `call` function is not present in @types/ioredis
-    sendCommand: (...args: string[]) => redisClient.call(...args),
-    // sendCommand: async (command: string, ...args: (string | number)[]) => {
-    //     return (await redisClient.call(command, ...args)) as RedisReply;
-    // },
-    prefix: "rl:api:", // Prefix for API limiter
-});
+let apiLimiter: RateLimitRequestHandler;
 
-export const apiLimiter = rateLimit({
-    store: apiStore,
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per windowMs
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: {
-        status: StatusCodes.TOO_MANY_REQUESTS,
-        message: "Too many requests, please try again after 15 minutes.",
-    },
-});
+export const initializeApiLimiter = () => {
+    const apiStore = new RedisStore({
+        sendCommand: (...args: string[]) => {
+            return redisClient.sendCommand(args);
+        },
+        prefix: "rl:api:",
+    });
+
+    apiLimiter = rateLimit({
+        store: apiStore,
+        windowMs: 15 * 60 * 1000,
+        max: 100,
+        standardHeaders: true,
+        legacyHeaders: false,
+        message: {
+            status: StatusCodes.TOO_MANY_REQUESTS,
+            message: "Too many requests, please try again after 15 minutes.",
+        },
+    });
+};
+
+export const getApiLimiter = () => {
+    if (!apiLimiter) {
+        throw new Error(
+            "API limiter not initialized. Call initializeApiLimiter first.",
+        );
+    }
+    return apiLimiter;
+};
