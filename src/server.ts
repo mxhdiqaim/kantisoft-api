@@ -42,18 +42,18 @@ app.use((req, res, next) => {
 });
 
 // Placeholder for rate limiter - will be populated in main.ts
-let rateLimiterMiddleware: any = null;
-
-app.use((req, res, next) => {
-    if (rateLimiterMiddleware) {
-        return rateLimiterMiddleware(req, res, next);
-    }
-    next();
-});
-
-export const setRateLimiter = (limiter: any) => {
-    rateLimiterMiddleware = limiter;
-};
+// let rateLimiterMiddleware: any = null;
+//
+// app.use((req, res, next) => {
+//     if (rateLimiterMiddleware) {
+//         return rateLimiterMiddleware(req, res, next);
+//     }
+//     next();
+// });
+//
+// export const setRateLimiter = (limiter: any) => {
+//     rateLimiterMiddleware = limiter;
+// };
 
 app.get("/", (_req, res) => {
     res.status(200).json({ message: "API is up and running" });
