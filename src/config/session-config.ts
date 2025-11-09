@@ -1,31 +1,30 @@
 import { Express } from "express";
 import passport from "passport";
 import session from "express-session";
-// import { RedisStore } from "connect-redis";
-// import redisClient from "./redis-config";
+import pgSession from "connect-pg-simple";
+import { pool } from "../db";
 import { getEnvVariable } from "../utils";
 
-const configureSession = (app: Express) => {
-    const SESSION_SECRET = getEnvVariable("SESSION_SECRET");
-    const NODE_ENV = getEnvVariable("NODE_ENV");
+const pgStore = pgSession(session);
 
-    // const redisStore = new RedisStore({
-    //     client: redisClient,
-    //     prefix: "sess:",
-    //     serializer: JSON,
-    // });
+const SESSION_SECRET = getEnvVariable("SESSION_SECRET");
+
+const configureSession = (app: Express) => {
+    const localDevCookie = {
+        maxAge: 1000 * 60 * 60 * 24 * 7,
+        secure: false,
+    };
 
     app.use(
         session({
-            // store: redisStore,
-            secret: SESSION_SECRET,
             resave: false,
             saveUninitialized: false,
-            cookie: {
-                secure: NODE_ENV === "production", // use secure cookies in production
-                httpOnly: true,
-                maxAge: 2 * 60 * 60 * 1000, // 2 hours
-            },
+            store: new pgStore({ pool, createTableIfMissing: true }),
+            secret: SESSION_SECRET,
+            cookie:
+                process.env.NODE_ENV === "development"
+                    ? localDevCookie
+                    : undefined,
         }),
     );
 
