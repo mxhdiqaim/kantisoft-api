@@ -6,6 +6,7 @@
     "dev": "nodemon",
     "build": "tsc",
     "start": "node dist/main.js",
+    "lint": "eslint .",
     "generate": "drizzle-kit generate",
     "migrate": "ts-node src/db/migrate.ts",
     "migrate:prod": "node dist/src/db/migrate.js",

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { and, eq, gte, inArray, sum, count } from "drizzle-orm";
 import { sql, desc } from "drizzle-orm";
 import { lte } from "drizzle-orm/sql/expressions/conditions";
