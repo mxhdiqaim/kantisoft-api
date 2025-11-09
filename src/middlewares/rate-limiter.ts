@@ -1,36 +1,9 @@
-import { rateLimit, RateLimitRequestHandler } from "express-rate-limit";
-import { RedisStore } from "rate-limit-redis";
-import redisClient from "../config/redis-config";
-import { StatusCodes } from "http-status-codes";
+import { rateLimit } from "express-rate-limit";
 
-let apiLimiter: RateLimitRequestHandler;
-
-export const initializeApiLimiter = () => {
-    const apiStore = new RedisStore({
-        sendCommand: (...args: string[]) => {
-            return redisClient.sendCommand(args);
-        },
-        prefix: "rl:api:",
-    });
-
-    apiLimiter = rateLimit({
-        store: apiStore,
-        windowMs: 15 * 60 * 1000,
-        max: 100,
-        standardHeaders: true,
-        legacyHeaders: false,
-        message: {
-            status: StatusCodes.TOO_MANY_REQUESTS,
-            message: "Too many requests, please try again after 15 minutes.",
-        },
-    });
-};
-
-export const getApiLimiter = () => {
-    if (!apiLimiter) {
-        throw new Error(
-            "API limiter not initialized. Call initializeApiLimiter first.",
-        );
-    }
-    return apiLimiter;
-};
+export const expressRateLimiter = rateLimit({
+    windowMs: 5 * 60 * 1000, // 5 minutes
+    max: 100, // limit each IP to 100 requests per windowMs
+    standardHeaders: true, // Return rate limit info in the headers
+    legacyHeaders: false, // Disable the X-RateLimit headers
+    message: "Too many requests from this IP, please try again later.",
+});
