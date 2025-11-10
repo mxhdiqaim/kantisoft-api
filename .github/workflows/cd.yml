@@ -38,8 +38,8 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.DOCKER_USERNAME }} # GitHub Secret
-          password: ${{ secrets.DOCKER_PASSWORD }} # GitHub Secret (PAT)
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 🏗️ Build and Push Production Image
         uses: docker/build-push-action@v6  # Note: v6 is the latest stable version
