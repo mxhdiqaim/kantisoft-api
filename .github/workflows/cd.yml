@@ -3,7 +3,7 @@ name: CD - Build and Push Docker Image
 on:
   push:
     branches:
-      - master # Only run the CD job when code is pushed/merged to master branch
+      - master # Only run the CD job when code is pushed/merged to the master branch
 
 env:
   REGISTRY: ghcr.io # GitHub Container Registry
@@ -42,12 +42,12 @@ jobs:
           password: ${{ secrets.DOCKER_PASSWORD }} # GitHub Secret (PAT)
 
       - name: 🏗️ Build and Push Production Image
-        uses: docker/build-and-push-action@v5
+        uses: docker/build-push-action@v6  # Note: v6 is the latest stable version
         with:
           context: .
-          file: ./Dockerfile # Use your Dockerfile
-          push: true # Push the image to the registry
+          file: ./Dockerfile
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha # Use GitHub Actions caching for faster subsequent builds
+          cache-from: type=gha
           cache-to: type=gha,mode=max
