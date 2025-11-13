@@ -1,17 +1,26 @@
 import "dotenv/config";
 import * as db from "./src/db";
-import server from "./src/server";
+import server, { app } from "./src/server";
 import { getEnvVariable } from "./src/utils";
+import { connectRedis } from "./src/config/redis-config";
+import { createRateLimiter } from "./src/middlewares/rate-limiter";
 
 const PORT = parseInt(getEnvVariable("PORT"));
 
 (async () => {
+    // DB Connection
     await db
         .connect()
         .then(() => console.log("Database connection has been established"))
         .catch((err) =>
             console.error("Failed to connect to the database", err),
         );
+
+    // Redis Connection
+    await connectRedis();
+
+    // Apply rate limiter after Redis is connected
+    app.use(createRateLimiter());
 
     server.on("error", (error: NodeJS.ErrnoException) => {
         const bind = "Port " + PORT;
