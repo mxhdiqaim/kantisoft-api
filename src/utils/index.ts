@@ -1,5 +1,3 @@
-import "dotenv/config";
-
 export const generateOrderReference = (length = 8) => {
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     let result = "ORD-";
