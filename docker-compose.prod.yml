@@ -1,5 +1,11 @@
 version: "3.8"
 
+secrets:
+  db_password_file:
+    file: ./db_password.secret
+  redis_password_file:
+    file: ./redis_password.secret
+
 services:
   api:
     build:
@@ -11,6 +17,8 @@ services:
     #    ports:
     #      - "5473:5473"
     environment:
+      DB_PASSWORD_FILE_PATH: /run/secrets/db_password_file
+      REDIS_PASSWORD_FILE_PATH: /run/secrets/redis_password_file
       NODE_ENV: production
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
       REDIS_HOST: redis_cache
@@ -21,6 +29,9 @@ services:
         condition: service_healthy
       redis_cache:
         condition: service_healthy
+    secrets:
+      - db_password_file
+      - redis_password_file
 
   postgres_db:
     image: postgres:16-alpine
@@ -30,11 +41,14 @@ services:
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      #      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password_file
     ports:
       - "5432:5432"
     volumes:
       - postgres_data_prod:/var/lib/postgresql/data
+    secrets:
+      - db_password_file
 
   redis_cache:
     image: redis:8-alpine
@@ -44,16 +58,19 @@ services:
     ports:
       - "${REDIS_PORT}:${REDIS_PORT}"
     environment:
-      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password_file
+    #      REDIS_PASSWORD: ${REDIS_PASSWORD}
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD} --maxmemory 256mb --maxmemory-policy allkeys-lru
-    volumes:
-      - redis_data_prod:/data
     healthcheck:
       test: [ "CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 1s
+    volumes:
+      - redis_data_prod:/data
+    secrets:
+      - redis_password_file
 
   nginx:
     image: nginx:stable-alpine

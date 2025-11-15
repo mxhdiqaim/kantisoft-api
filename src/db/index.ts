@@ -3,23 +3,29 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool, PoolConfig } from "pg";
 import schema from "./schema";
 import { getEnvVariable } from "../utils";
+import { getPassword } from "../utils/secret";
 
 export let pool: Pool;
 
 // Conditional Pool configuration based on NODE_ENV
 const NODE_ENV = getEnvVariable("NODE_ENV");
+
 if (NODE_ENV === "production") {
-    const connectionString = getEnvVariable("DATABASE_URL");
+    // Get non-secret variables from .env.prod
+    const host = getEnvVariable("DB_HOST");
+    const port = getEnvVariable("DB_PORT");
+    const user = getEnvVariable("DB_USER");
+    const database = getEnvVariable("DB_NAME");
     const sslRequired = getEnvVariable("DATABASE_SSL_REQUIRED") == "true";
 
-    if (!connectionString) {
-        throw new Error(
-            "DATABASE_URL environment variable is not set in production. Please configure it.",
-        );
-    }
+    // Read the password from the secret file path
+    const password = getPassword("DB_PASSWORD", "DB_PASSWORD_FILE_PATH");
+
+    // Construct the connection URL
+    const connectionString = `postgresql://${user}:${password}@${host}:${port}/${database}`;
 
     const poolConfig: PoolConfig = {
-        connectionString: connectionString,
+        connectionString,
     };
 
     if (sslRequired) {

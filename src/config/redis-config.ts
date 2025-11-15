@@ -1,9 +1,10 @@
 import { createClient } from "redis";
 import { getEnvVariable } from "../utils";
+import { getPassword } from "../utils/secret";
 
 const redisHost = getEnvVariable("REDIS_HOST");
 const redisPort = getEnvVariable("REDIS_PORT");
-const redisPassword = getEnvVariable("REDIS_PASSWORD");
+const redisPassword = getPassword("REDIS_PASSWORD", "REDIS_PASSWORD_FILE_PATH");
 
 const redisClient = createClient({
     url: `redis://:${redisPassword}@${redisHost}:${redisPort}`,

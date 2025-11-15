@@ -6,12 +6,9 @@ import db from "../db";
 import { users, UserSchemaT } from "../schema/users-schema";
 import { UserStatusEnum } from "../types/enums";
 import { AuthUserT } from "./auth-config";
+import { getEnvVariable } from "../utils";
 
-const JWT_SECRET = process.env.JWT_SECRET;
-
-if (!JWT_SECRET) {
-    throw new Error("JWT_SECRET is not defined in your environment variables");
-}
+const jwtSecret = getEnvVariable("JWT_SECRET");
 
 /**
  * Generates a JWT for a given user.
@@ -36,14 +33,14 @@ export const generateToken = (user: UserSchemaT) => {
         lastModified: user.lastModified,
     };
 
-    return jwt.sign(userData, JWT_SECRET, {
+    return jwt.sign(userData, jwtSecret, {
         expiresIn: "12h",
     });
 };
 
 const opts = {
     jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-    secretOrKey: JWT_SECRET,
+    secretOrKey: jwtSecret,
 };
 
 passport.use(
