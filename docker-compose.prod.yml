@@ -49,6 +49,12 @@ services:
       - postgres_data_prod:/var/lib/postgresql/data
     secrets:
       - db_password_file
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   redis_cache:
     image: redis:8-alpine
