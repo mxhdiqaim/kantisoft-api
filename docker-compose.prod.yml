@@ -6,6 +6,8 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: kantisoft-api-prod
+    env_file:
+      - .env.prod
     #    ports:
     #      - "5473:5473"
     environment:
@@ -14,8 +16,6 @@ services:
       REDIS_HOST: redis_cache
       REDIS_PORT: ${REDIS_PORT}
       REDIS_PASSWORD: ${REDIS_PASSWORD}
-    env_file:
-      - .env.prod
     depends_on:
       postgres_db:
         condition: service_healthy
@@ -25,6 +25,8 @@ services:
   postgres_db:
     image: postgres:16-alpine
     container_name: kantisoft-db-prod
+    env_file:
+      - .env.prod
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
@@ -37,6 +39,8 @@ services:
   redis_cache:
     image: redis:8-alpine
     container_name: kantisoft-redis-prod
+    env_file:
+      - .env.prod
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
     command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD} --maxmemory 256mb --maxmemory-policy allkeys-lru
@@ -52,6 +56,8 @@ services:
   nginx:
     image: nginx:stable-alpine
     container_name: kantisoft-nginx-prod
+    env_file:
+      - .env.prod
     restart: always
     ports:
       - "80:80"

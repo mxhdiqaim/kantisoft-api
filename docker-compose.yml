@@ -6,13 +6,13 @@ services:
       context: .
       dockerfile: Dockerfile.dev
     container_name: kantisoft-api-dev
+    env_file:
+      - .env.local
     ports:
       - "${PORT}:${PORT}"
     environment:
       NODE_ENV: development
       DATABASE_URL: postgresql://${DB_USER}:${DB_PASSWORD}@${DB_HOST}:${DB_PORT}/${DB_NAME}
-    env_file:
-      - .env
     depends_on:
       - postgres_db
       - redis_cache
@@ -23,6 +23,8 @@ services:
   postgres_db:
     image: postgres:16-alpine
     container_name: kantisoft-db-dev
+    env_file:
+      - .env.local
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
@@ -35,6 +37,8 @@ services:
   redis_cache:
     image: redis:8-alpine
     container_name: kantisoft-redis-dev
+    env_file:
+      - .env.local
     ports:
       - "${REDIS_PORT}:${REDIS_PORT}"
     environment:
