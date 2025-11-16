@@ -106,7 +106,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             # Set the directory where your docker-compose.prod.yml file lives on the Droplet
-            DEPLOY_PATH="/root/kantisoft" 
+            DEPLOY_PATH="/root/kantisoft/kantisoft-api" 
             
             echo "Navigating to deployment directory..."
             cd $DEPLOY_PATH
