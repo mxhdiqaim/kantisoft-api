@@ -92,7 +92,10 @@ services:
       # Volume for SSL certificates
       - certbot_volumes:/etc/letsencrypt
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+      certbot:
+        condition: service_started
 
   certbot:
     image: certbot/certbot
