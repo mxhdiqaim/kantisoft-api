@@ -8,7 +8,7 @@ DB_PORT_FINAL=$POSTGRES_PORT
 # Check if required environment variables are set
 # Check the host and user/port which are needed for connection
 if [ -z "$DB_HOST_FINAL" ] || [ -z "$DB_PORT_FINAL" ] || [ -z "$DB_USER_FINAL" ]; then
-  echo "Error: DB_HOST, DB_PORT, or DB_USER environment variables are not set."
+  echo "Error: POSTGRES_HOST, POSTGRES_PORT, or POSTGRES_USER environment variables are not set."
   exit 1
 fi
 
