@@ -7,7 +7,7 @@ let redisClient: ReturnType<typeof createClient>;
 if (NODE_ENV === "production") {
     const redisHost = getEnvVariable("REDIS_HOST");
     const redisPort = getEnvVariable("REDIS_PORT");
-    const redisPassword = getEnvVariable("REDIS_PASSWORD_FILE_PATH");
+    const redisPassword = getEnvVariable("REDIS_PASSWORD_FILE");
 
     redisClient = createClient({
         url: `redis://:${redisPassword}@${redisHost}:${redisPort}`,
