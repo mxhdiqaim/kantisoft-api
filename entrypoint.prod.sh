@@ -1,13 +1,13 @@
 #!/bin/sh
 
 # Use the variables that SHOULD be defined in the Docker Compose API environment block
-DB_USER_FINAL=$POSTGRES_USER
-DB_HOST_FINAL=$POSTGRES_HOST
-DB_PORT_FINAL=$POSTGRES_PORT
+#DB_USER_FINAL=$POSTGRES_USER
+#DB_HOST_FINAL=$POSTGRES_HOST
+#DB_PORT_FINAL=$POSTGRES_PORT
 
 # Check if required environment variables are set
 # Check the host and user/port which are needed for connection
-if [ -z "$DB_HOST_FINAL" ] || [ -z "$DB_PORT_FINAL" ] || [ -z "$DB_USER_FINAL" ]; then
+if [ -z "$POSTGRES_HOST" ] || [ -z "$POSTGRES_PORT" ] || [ -z "$POSTGRES_USER" ]; then
   echo "Error: POSTGRES_HOST, POSTGRES_PORT, or POSTGRES_USER environment variables are not set."
   exit 1
 fi
@@ -17,18 +17,18 @@ if [ -z "$REDIS_HOST" ] || [ -z "$REDIS_PORT" ]; then
   exit 1
 fi
 
-# The DB_PASSWORD_FILE_PATH is defined by Docker Secrets: /run/secrets/db_password_file
-if [ -z "$POSTGRES_PASSWORD_FILE_PATH" ]; then
+# The DB_PASSWORD_FILE is defined by Docker Secrets: /run/secrets/db_password_file
+if [ -z "$POSTGRES_PASSWORD_FILE" ]; then
   echo "Error: DB_PASSWORD_FILE_PATH environment variable is not set."
   exit 1
 fi
 
-echo "Waiting for the database at $DB_HOST_FINAL:$DB_PORT_FINAL..."
+echo "Waiting for the database at $POSTGRES_HOST:$POSTGRES_PORT..."
 
 # Use the secret file content for the password during the readiness check
-export POSTGRES_PASSWORD=$(cat "$POSTGRES_PASSWORD_FILE_PATH")
+export POSTGRES_PASSWORD=$(cat "$POSTGRES_PASSWORD_FILE")
 
-until pg_isready -h "$DB_HOST_FINAL" -p "$DB_PORT_FINAL" -U "$DB_USER_FINAL"; do
+until pg_isready -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER"; do
   echo "Database is unavailable - sleeping"
   sleep 1
 done
