@@ -15,14 +15,14 @@ services:
     #    env_file:
     #      - .env.prod
     environment:
+      NODE_ENV: production
       POSTGRES_PASSWORD_FILE_PATH: /run/secrets/db_password_file
       REDIS_PASSWORD_FILE_PATH: /run/secrets/redis_password_file
-      NODE_ENV: production
-      REDIS_HOST: redis_cache
-      REDIS_PORT: 6379
-      POSTGRES_HOST: postgres_db
-      POSTGRES_PORT: 5432
-      POSTGRES_USER: ${POSTGRES_USER}
+    #      REDIS_HOST: redis_cache
+    #      REDIS_PORT: 6379
+    #      POSTGRES_HOST: postgres_db
+    #      POSTGRES_PORT: 5432
+    #      POSTGRES_USER: ${POSTGRES_USER}
     depends_on:
       postgres_db:
         condition: service_healthy
@@ -38,8 +38,8 @@ services:
     #    env_file:
     #      - .env.prod
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
+      #      POSTGRES_DB: ${POSTGRES_DB}
+      #      POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD_FILE_PATH: /run/secrets/db_password_file
     ports:
       - "5432:5432"
