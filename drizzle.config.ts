@@ -1,7 +1,6 @@
 import "dotenv/config";
 import { defineConfig } from "drizzle-kit";
 import { getEnvVariable } from "./src/utils";
-import { getPassword } from "./src/utils/secret";
 
 // Conditionally set dbCredentials based on NODE_ENV
 let dbCredentials;
@@ -15,10 +14,7 @@ if (NODE_ENV === "production") {
     const sslRequired = getEnvVariable("POSTGRES_SSL_REQUIRED") == "true";
 
     // Read the password from the secret file path
-    const password = getPassword(
-        "POSTGRES_PASSWORD",
-        "POSTGRES_PASSWORD_FILE_PATH",
-    );
+    const password = getEnvVariable("POSTGRES_PASSWORD_FILE_PATH");
     // const dbUrl = new URL(process.env.POSTGRES_URL!);
     dbCredentials = {
         host,

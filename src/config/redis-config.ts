@@ -1,14 +1,26 @@
 import { createClient } from "redis";
 import { getEnvVariable } from "../utils";
-import { getPassword } from "../utils/secret";
+import { NODE_ENV } from "../db";
 
-const redisHost = getEnvVariable("REDIS_HOST");
-const redisPort = getEnvVariable("REDIS_PORT");
-const redisPassword = getPassword("REDIS_PASSWORD", "REDIS_PASSWORD_FILE_PATH");
+let redisClient: ReturnType<typeof createClient>;
 
-const redisClient = createClient({
-    url: `redis://:${redisPassword}@${redisHost}:${redisPort}`,
-});
+if (NODE_ENV === "production") {
+    const redisHost = getEnvVariable("REDIS_HOST");
+    const redisPort = getEnvVariable("REDIS_PORT");
+    const redisPassword = getEnvVariable("REDIS_PASSWORD_FILE_PATH");
+
+    redisClient = createClient({
+        url: `redis://:${redisPassword}@${redisHost}:${redisPort}`,
+    });
+} else {
+    const redisHost = getEnvVariable("REDIS_HOST");
+    const redisPort = getEnvVariable("REDIS_PORT");
+    const redisPassword = getEnvVariable("REDIS_PASSWORD");
+
+    redisClient = createClient({
+        url: `redis://:${redisPassword}@${redisHost}:${redisPort}`,
+    });
+}
 
 redisClient.on("error", (err) => console.log("Redis Client Error", err));
 
