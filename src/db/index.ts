@@ -12,14 +12,17 @@ const NODE_ENV = getEnvVariable("NODE_ENV");
 
 if (NODE_ENV === "production") {
     // Get non-secret variables from .env.prod
-    const host = getEnvVariable("DB_HOST");
-    const port = getEnvVariable("DB_PORT");
-    const user = getEnvVariable("DB_USER");
-    const database = getEnvVariable("DB_NAME");
-    const sslRequired = getEnvVariable("DATABASE_SSL_REQUIRED") == "true";
+    const host = getEnvVariable("POSTGRES_HOST");
+    const port = getEnvVariable("POSTGRES_PORT");
+    const user = getEnvVariable("POSTGRES_USER");
+    const database = getEnvVariable("POSTGRES_DB");
+    const sslRequired = getEnvVariable("POSTGRES_SSL_REQUIRED") == "true";
 
     // Read the password from the secret file path
-    const password = getPassword("DB_PASSWORD", "DB_PASSWORD_FILE_PATH");
+    const password = getPassword(
+        "POSTGRES_PASSWORD",
+        "POSTGRES_PASSWORD_FILE_PATH",
+    );
 
     // Construct the connection URL
     const connectionString = `postgresql://${user}:${password}@${host}:${port}/${database}`;
@@ -37,11 +40,11 @@ if (NODE_ENV === "production") {
     pool = new Pool(poolConfig);
 } else {
     // Development/Local environment configuration
-    const host = getEnvVariable("DB_HOST");
-    const port = Number(getEnvVariable("DB_PORT") || "5432");
-    const user = getEnvVariable("DB_USER");
-    const password = getEnvVariable("DB_PASSWORD");
-    const database = getEnvVariable("DB_NAME");
+    const host = getEnvVariable("POSTGRES_HOST");
+    const port = Number(getEnvVariable("POSTGRES_PORT") || "5432");
+    const user = getEnvVariable("POSTGRES_USER");
+    const password = getEnvVariable("POSTGRES_PASSWORD");
+    const database = getEnvVariable("POSTGRES_DB");
 
     pool = new Pool({
         host,
