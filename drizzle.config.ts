@@ -1,22 +1,32 @@
 import "dotenv/config";
 import { defineConfig } from "drizzle-kit";
-import { URL } from "url";
 import { getEnvVariable } from "./src/utils";
+import { getPassword } from "./src/utils/secret";
 
 // Conditionally set dbCredentials based on NODE_ENV
 let dbCredentials;
 const NODE_ENV = getEnvVariable("NODE_ENV");
-const postgresSsl = getEnvVariable("POSTGRES_SSL_REQUIRED") == "true";
+// const postgresSsl = getEnvVariable("POSTGRES_SSL_REQUIRED") == "true";
 if (NODE_ENV === "production") {
-    // Parse the DATABASE_URL to extract credentials
-    const dbUrl = new URL(process.env.POSTGRES_URL!);
+    const host = getEnvVariable("POSTGRES_HOST");
+    const port = getEnvVariable("POSTGRES_PORT");
+    const user = getEnvVariable("POSTGRES_USER");
+    const database = getEnvVariable("POSTGRES_DB");
+    const sslRequired = getEnvVariable("POSTGRES_SSL_REQUIRED") == "true";
+
+    // Read the password from the secret file path
+    const password = getPassword(
+        "POSTGRES_PASSWORD",
+        "POSTGRES_PASSWORD_FILE_PATH",
+    );
+    // const dbUrl = new URL(process.env.POSTGRES_URL!);
     dbCredentials = {
-        host: dbUrl.hostname,
-        port: Number(dbUrl.port),
-        user: dbUrl.username,
-        password: dbUrl.password,
-        database: dbUrl.pathname.replace(/^\//, ""),
-        ssl: postgresSsl,
+        host,
+        port: Number(port),
+        user,
+        password,
+        database,
+        ssl: sslRequired,
     };
 } else {
     dbCredentials = {

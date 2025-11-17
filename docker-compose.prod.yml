@@ -12,10 +12,10 @@ services:
     image: ghcr.io/mxhdiqaim/kantisoft-api:latest
     pull_policy: always
     container_name: kantisoft-api-prod
-    env_file:
-      - .env.prod
+    #    env_file:
+    #      - .env.prod
     environment:
-      DB_PASSWORD_FILE_PATH: /run/secrets/db_password_file
+      POSTGRES_PASSWORD_FILE_PATH: /run/secrets/db_password_file
       REDIS_PASSWORD_FILE_PATH: /run/secrets/redis_password_file
       NODE_ENV: production
       REDIS_HOST: redis_cache
@@ -35,13 +35,12 @@ services:
   postgres_db:
     image: postgres:16-alpine
     container_name: kantisoft-db-prod
-    env_file:
-      - .env.prod
+    #    env_file:
+    #      - .env.prod
     environment:
-      # These variables must be defined in your .env.prod file!
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD_FILE: /run/secrets/db_password_file
+      POSTGRES_PASSWORD_FILE_PATH: /run/secrets/db_password_file
     ports:
       - "5432:5432"
     volumes:
@@ -58,8 +57,8 @@ services:
   redis_cache:
     image: redis:8-alpine
     container_name: kantisoft-redis-prod
-    env_file:
-      - .env.prod
+    #    env_file:
+    #      - .env.prod
     environment:
       REDIS_PASSWORD_FILE: /run/secrets/redis_password_file
     command: redis-server --appendonly yes --requirepass /run/secrets/redis_password_file --maxmemory 256mb --maxmemory-policy allkeys-lru
@@ -77,8 +76,8 @@ services:
   nginx:
     image: nginx:stable-alpine
     container_name: kantisoft-nginx-prod
-    env_file:
-      - .env.prod
+    #    env_file:
+    #      - .env.prod
     restart: always
     ports:
       - "80:80"
