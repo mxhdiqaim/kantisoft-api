@@ -13,10 +13,13 @@ services:
       NODE_ENV: production
       POSTGRES_PASSWORD_FILE: /run/secrets/db_password_file
       REDIS_PASSWORD_FILE: /run/secrets/redis_password_file
-      DB_HOST: postgres_db
-      DB_PORT: 5432
+
       REDIS_HOST: redis_cache
       REDIS_PORT: 6379
+
+      POSTGRES_HOST: postgres_db
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER}
     depends_on:
       postgres_db:
         condition: service_healthy
