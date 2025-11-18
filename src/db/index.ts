@@ -11,14 +11,14 @@ export const NODE_ENV = getEnvVariable("NODE_ENV");
 
 if (NODE_ENV === "production") {
     // Get non-secret variables from .env.prod
-    const host = getEnvVariable("POSTGRES_HOST");
-    const port = getEnvVariable("POSTGRES_PORT");
-    const user = getEnvVariable("POSTGRES_USER");
-    const database = getEnvVariable("POSTGRES_DB");
-    const sslRequired = getEnvVariable("POSTGRES_SSL_REQUIRED") == "true";
+    const host = getEnvVariable("DB_HOST");
+    const port = getEnvVariable("DB_PORT");
+    const user = getEnvVariable("DB_USER");
+    const database = getEnvVariable("DB_NAME");
+    const sslRequired = getEnvVariable("DB_SSL_REQUIRED") == "true";
 
     // Read the password from the secret file path
-    const password = getEnvVariable("POSTGRES_PASSWORD_FILE");
+    const password = getEnvVariable("DB_PASSWORD_FILE");
 
     // Construct the connection URL
     const connectionString = `postgresql://${user}:${password}@${host}:${port}/${database}`;

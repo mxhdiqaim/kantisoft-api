@@ -11,18 +11,15 @@ services:
     container_name: kantisoft-api-prod
     environment:
       NODE_ENV: production
-      POSTGRES_PASSWORD_FILE: /run/secrets/db_password_file
-      REDIS_PASSWORD_FILE: /run/secrets/redis_password_file
 
-      REDIS_HOST: redis_cache
+      DB_HOST: ${DB_HOST}
+      DB_PORT: ${DB_PORT}
+      DB_USER: ${DB_USER}
+      DB_PASSWORD_FILE: /run/secrets/db_password_file
+
       REDIS_PORT: 6379
-
-      DB_HOST: postgres_db
-      POSTGRES_HOST: postgres_db
-      DB_PORT: 5432
-      POSTGRES_PORT: 5432
-      DB_USER: ${POSTGRES_USER}
-      POSTGRES_USER: ${POSTGRES_USER}
+      REDIS_HOST: redis_cache
+      REDIS_PASSWORD_FILE: /run/secrets/redis_password_file
     depends_on:
       postgres_db:
         condition: service_healthy
@@ -42,8 +39,8 @@ services:
     image: postgres:16-alpine
     container_name: kantisoft-db-prod
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD_FILE: /run/secrets/db_password_file
     ports:
       - "5432:5432"
@@ -61,25 +58,21 @@ services:
   redis_cache:
     image: redis:8-alpine
     container_name: kantisoft-redis-prod
-    #    environment:
-    #      REDIS_PASSWORD_FILE: /run/secrets/redis_password_file
     command: redis-server --appendonly yes --requirepass /run/secrets/redis_password_file --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data_prod:/data
+    secrets:
+      - redis_password_file
     healthcheck:
       test: [ "CMD", "redis-cli", "-a", "$$(cat /run/secrets/redis_password_file)", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 1s
-    volumes:
-      - redis_data_prod:/data
-    secrets:
-      - redis_password_file
 
   nginx:
     image: nginx:stable-alpine
     container_name: kantisoft-nginx-prod
-    #    env_file:
-    #      - .env.prod
     restart: always
     ports:
       - "80:80"

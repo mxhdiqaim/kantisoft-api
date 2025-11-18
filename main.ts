@@ -1,16 +1,9 @@
 import "dotenv/config";
-// import dotenv from "dotenv";
 import * as db from "./src/db";
 import server, { app } from "./src/server";
 import { getEnvVariable } from "./src/utils";
 import { connectRedis } from "./src/config/redis-config";
 import { createRateLimiter } from "./src/middlewares/rate-limiter";
-
-// if (process.env.NODE_ENV === "production") {
-//     dotenv.config({ path: ".env.prod" });
-// } else {
-//     dotenv.config({ path: ".env.local" });
-// }
 
 const PORT = parseInt(getEnvVariable("PORT"));
 

@@ -2,8 +2,8 @@
 
 # Check if required environment variables are set
 # Check the host and user/port which are needed for connection
-if [ -z "$POSTGRES_HOST" ] || [ -z "$POSTGRES_PORT" ] || [ -z "$POSTGRES_USER" ]; then
-  echo "Error: POSTGRES_HOST, POSTGRES_PORT, or POSTGRES_USER environment variables are not set."
+if [ -z "$DB_HOST" ] || [ -z "$DB_PORT" ] || [ -z "$DB_USER" ]; then
+  echo "Error: DB_HOST, DB_PORT, or DB_USER environment variables are not set."
   exit 1
 fi
 
@@ -13,23 +13,24 @@ if [ -z "$REDIS_HOST" ] || [ -z "$REDIS_PORT" ]; then
 fi
 
 # The DB_PASSWORD_FILE is defined by Docker Secrets: /run/secrets/db_password_file
-if [ -z "$POSTGRES_PASSWORD_FILE" ]; then
+if [ -z "$DB_PASSWORD_FILE" ]; then
   echo "Error: DB_PASSWORD_FILE environment variable is not set."
   exit 1
 fi
 
-echo "Waiting for the database at $POSTGRES_HOST:$POSTGRES_PORT..."
+echo "Waiting for the database at $DB_HOST:$DB_PORT..."
 
 # Use the secret file content for the password during the readiness check
-export POSTGRES_PASSWORD=$(cat "$POSTGRES_PASSWORD_FILE")
+# shellcheck disable=SC2046
+export DB_PASSWORD=$(cat "$DB_PASSWORD_FILE")
 
-until pg_isready -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER"; do
+until pg_isready -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER"; do
   echo "Database is unavailable - sleeping"
   sleep 1
 done
 
-# Clear the POSTGRES_PASSWORD environment variable immediately after the check for security
-unset POSTGRES_PASSWORD
+# Clear the DB_PASSWORD environment variable immediately after the check for security
+unset DB_PASSWORD
 
 echo "Postgres is ready."
 
