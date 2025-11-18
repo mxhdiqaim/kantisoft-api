@@ -68,7 +68,7 @@ services:
   redis_cache:
     image: redis:8-alpine
     container_name: kantisoft-redis-prod
-    command: redis-server --appendonly yes --requirepass /run/secrets/redis_password_file --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --requirepass $(cat /run/secrets/redis_password_file) --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data_prod:/data
     secrets:
