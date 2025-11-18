@@ -22,11 +22,10 @@ if (NODE_ENV === "production") {
     const passwordFile = getEnvVariable("DB_PASSWORD_FILE");
     const password = readFileSync(passwordFile, "utf8").trim();
 
-    // // Read the password from the secret file path
-    // const password = getEnvVariable("DB_PASSWORD_FILE");
+    const encodedPassword = encodeURIComponent(password);
 
     // Construct the connection URL
-    const connectionString = `postgresql://${user}:${password}@${host}:${port}/${database}`;
+    const connectionString = `postgresql://${user}:${encodedPassword}@${host}:${port}/${database}`;
 
     const poolConfig: PoolConfig = {
         connectionString,
