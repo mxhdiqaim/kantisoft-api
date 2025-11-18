@@ -14,7 +14,7 @@ if (NODE_ENV === "production") {
     const database = getEnvVariable("DB_NAME");
     const sslRequired = getEnvVariable("DB_SSL_REQUIRED") == "true";
 
-    // ✅ Read the password from the secret file
+    // Read the password from the secret file
     const passwordFile = getEnvVariable("DB_PASSWORD_FILE");
     const password = readFileSync(passwordFile, "utf8").trim();
 

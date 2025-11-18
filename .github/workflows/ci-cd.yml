@@ -3,7 +3,6 @@ name: CI/CD Pipeline - Build, Test, Push & Deploy
 on:
   push:
     branches:
-      # CHECK THIS: Use 'main' if that is your repository's default branch.
       - master
 
 env:
@@ -60,7 +59,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}/api
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_REPO }}
           tags: |
             type=sha,format=short,prefix=sha-
             type=raw,value=latest,enable=true 

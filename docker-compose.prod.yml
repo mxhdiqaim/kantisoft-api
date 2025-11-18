@@ -15,22 +15,11 @@ services:
 
       # Database Settings
       DB_HOST: ${DB_HOST}
-      DATABASE_HOST: ${DB_HOST}
-
       DB_PORT: ${DB_PORT}
-      DATABASE_PORT: ${DB_PORT}
-
       DB_USER: ${DB_USER}
-      DATABASE_USER: ${DB_USER}
-
       DB_NAME: ${DB_NAME}
-      DATABASE_NAME: ${DB_NAME}
-
       DB_SSL_REQUIRED: ${DB_SSL_REQUIRED:-false}
-      DATABASE_SSL_REQUIRED: ${DB_SSL_REQUIRED:-false}
-
       DB_PASSWORD_FILE: /run/secrets/db_password_file
-      DATABASE_PASSWORD_FILE: /run/secrets/db_password_file
 
       # Application Settings
       JWT_SECRET: ${JWT_SECRET}
