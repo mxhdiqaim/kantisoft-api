@@ -90,9 +90,11 @@ services:
       - "80:80"
       - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/nginx-initial.conf:/etc/nginx/conf.d/default.conf:ro  # Start with HTTP only
+      - ./nginx/nginx.conf:/etc/nginx/nginx-full.conf:ro  # Full config for later
       - ./nginx/snippets:/etc/nginx/snippets:ro
       - certbot_volumes:/etc/letsencrypt
+      - certbot_volumes_www:/var/www/certbot
     depends_on:
       api:
         condition: service_healthy
