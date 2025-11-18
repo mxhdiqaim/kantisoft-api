@@ -13,16 +13,20 @@ if (NODE_ENV === "production") {
     const passwordFile = getEnvVariable("REDIS_PASSWORD_FILE");
     const redisPassword = readFileSync(passwordFile, "utf8").trim();
 
+    const encodedPassword = encodeURIComponent(redisPassword);
+
     redisClient = createClient({
-        url: `redis://:${redisPassword}@${redisHost}:${redisPort}`,
+        url: `redis://:${encodedPassword}@${redisHost}:${redisPort}`,
     });
 } else {
     const redisHost = getEnvVariable("REDIS_HOST");
     const redisPort = getEnvVariable("REDIS_PORT");
     const redisPassword = getEnvVariable("REDIS_PASSWORD");
 
+    const encodedPassword = encodeURIComponent(redisPassword);
+
     redisClient = createClient({
-        url: `redis://:${redisPassword}@${redisHost}:${redisPort}`,
+        url: `redis://:${encodedPassword}@${redisHost}:${redisPort}`,
     });
 }
 
