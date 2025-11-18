@@ -18,7 +18,7 @@ if (NODE_ENV === "production") {
     const sslRequired = getEnvVariable("POSTGRES_SSL_REQUIRED") == "true";
 
     // Read the password from the secret file path
-    const password = getEnvVariable("POSTGRES_PASSWORD_FILE_PATH");
+    const password = getEnvVariable("POSTGRES_PASSWORD_FILE");
 
     // Construct the connection URL
     const connectionString = `postgresql://${user}:${password}@${host}:${port}/${database}`;

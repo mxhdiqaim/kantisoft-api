@@ -1,10 +1,5 @@
 #!/bin/sh
 
-# Use the variables that SHOULD be defined in the Docker Compose API environment block
-#DB_USER_FINAL=$POSTGRES_USER
-#DB_HOST_FINAL=$POSTGRES_HOST
-#DB_PORT_FINAL=$POSTGRES_PORT
-
 # Check if required environment variables are set
 # Check the host and user/port which are needed for connection
 if [ -z "$POSTGRES_HOST" ] || [ -z "$POSTGRES_PORT" ] || [ -z "$POSTGRES_USER" ]; then
@@ -19,7 +14,7 @@ fi
 
 # The DB_PASSWORD_FILE is defined by Docker Secrets: /run/secrets/db_password_file
 if [ -z "$POSTGRES_PASSWORD_FILE" ]; then
-  echo "Error: DB_PASSWORD_FILE_PATH environment variable is not set."
+  echo "Error: DB_PASSWORD_FILE environment variable is not set."
   exit 1
 fi
 

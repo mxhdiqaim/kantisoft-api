@@ -7,13 +7,13 @@ import * as activityLog from "../schema/activity-log-schema";
 import * as menuItemsRelations from "../schema/relations/menu-items-relation";
 import * as ordersRelations from "../schema/relations/orders-relation";
 import * as usersRelations from "../schema/relations/user-relations";
-import * as storeRalations from "../schema/relations/store-relation";
+import * as storeRelations from "../schema/relations/store-relation";
 
 const relations = {
     ...menuItemsRelations,
     ...ordersRelations,
     ...usersRelations,
-    ...storeRalations,
+    ...storeRelations,
 };
 
 const schema = {
