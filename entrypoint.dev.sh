@@ -2,7 +2,7 @@
 
 # This is a "wait-for-it" pattern to ensure the database is ready
 echo "Waiting for the database to be ready..."
-until pg_isready -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER";
+until pg_isready -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER";
 do
   echo "Database is unavailable - sleeping"
   sleep 1

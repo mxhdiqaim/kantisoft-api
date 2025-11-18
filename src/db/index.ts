@@ -36,11 +36,11 @@ if (NODE_ENV === "production") {
     pool = new Pool(poolConfig);
 } else {
     // Development/Local environment configuration
-    const host = getEnvVariable("POSTGRES_HOST");
-    const port = Number(getEnvVariable("POSTGRES_PORT") || "5432");
-    const user = getEnvVariable("POSTGRES_USER");
-    const password = getEnvVariable("POSTGRES_PASSWORD");
-    const database = getEnvVariable("POSTGRES_DB");
+    const host = getEnvVariable("DB_HOST");
+    const port = Number(getEnvVariable("DB_PORT") || "5432");
+    const user = getEnvVariable("DB_USER");
+    const password = getEnvVariable("DB_PASSWORD");
+    const database = getEnvVariable("DB_NAME");
 
     pool = new Pool({
         host,
