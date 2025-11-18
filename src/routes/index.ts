@@ -16,7 +16,7 @@ import { UserRoleEnum } from "../types/enums";
 const router = express.Router();
 
 // Public authentication routes
-router.use("/api", auth); // Handles /api/register, /api/login, /api/logout (logout is protected within auth-routes)
+router.use("/", auth); // Handles /api/register, /api/login, /api/logout (logout is protected within auth-routes)
 
 // All subsequent routes are protected
 router.use(protectedRoute);

@@ -20,9 +20,12 @@ const URL =
               "http://localhost:3000",
               "http://localhost:3001",
               "http://localhost:3003",
-              "http://localhost:3004",
+              "http://localhost:*",
           ]
-        : [`https://${process.env.CLIENT_DOMAIN}`];
+        : [
+              `https://${process.env.LANDING_PAGE}`,
+              `https://${process.env.APP_URL}`,
+          ];
 
 /** Session */
 configureSession(app);
@@ -53,7 +56,7 @@ app.get("/", (_req, res) => {
 });
 
 /** Routes */
-app.use(routes);
+app.use("/api/v1", routes);
 
 app.use(express.static(path.join(__dirname, "public")));
 

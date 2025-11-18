@@ -6,13 +6,7 @@ export const handleError = (
     message: string,
     statusCode: StatusCodeEnum = StatusCodeEnum.INTERNAL_SERVER_ERROR,
 ) => {
-    const errorObj =
-        typeof message === "string"
-            ? { type: StatusCodeEnum.INTERNAL_SERVER_ERROR, message }
-            : {
-                  type: statusCode ?? StatusCodeEnum.INTERNAL_SERVER_ERROR,
-                  message,
-              };
+    const errorObj = { type: statusCode, message };
 
     const errorMessage =
         statusCode === 500
@@ -27,7 +21,6 @@ export const handleError = (
             .json({ type: errorObj.type || "error", message: errorMessage });
     }
 
-    console.error("An error occurred:", errorObj); // log to a production server can be integrated with tools like Sentry
     return res.status(statusCode).json({
         type: errorObj.type,
         message: errorObj.message,
