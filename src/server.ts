@@ -45,7 +45,11 @@ app.use((req, res, next) => {
 });
 
 app.get("/", (_req, res) => {
-    res.status(200).json({ message: "API is up and running" });
+    res.status(200).json({
+        status: "ok",
+        message: "API is up and running",
+        timestamp: new Date().toISOString(),
+    });
 });
 
 /** Routes */

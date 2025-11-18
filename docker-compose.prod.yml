@@ -39,7 +39,7 @@ services:
       - db_password_file
       - redis_password_file
     healthcheck:
-      test: [ "CMD", "curl", "--fail", "http://localhost:5473/" ]
+      test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5473/" ]
       interval: 10s
       timeout: 5s
       retries: 5
