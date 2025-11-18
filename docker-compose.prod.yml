@@ -11,12 +11,22 @@ services:
     container_name: kantisoft-api-prod
     environment:
       NODE_ENV: production
+      PORT: ${PORT:-5473}
 
+      # Database Settings
       DB_HOST: ${DB_HOST}
       DB_PORT: ${DB_PORT}
       DB_USER: ${DB_USER}
+      DB_NAME: ${DB_NAME}
+      DB_SSL_REQUIRED: ${DB_SSL_REQUIRED}
       DB_PASSWORD_FILE: /run/secrets/db_password_file
 
+      # Application Settings
+      JWT_SECRET: ${JWT_SECRET}
+      SESSION_SECRET: ${SESSION_SECRET}
+      CLIENT_DOMAIN: ${CLIENT_DOMAIN}
+
+      # Redis Settings
       REDIS_PORT: 6379
       REDIS_HOST: redis_cache
       REDIS_PASSWORD_FILE: /run/secrets/redis_password_file

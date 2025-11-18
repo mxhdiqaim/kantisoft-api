@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { defineConfig } from "drizzle-kit";
+import { readFileSync } from "fs";
 import { getEnvVariable } from "./src/utils";
 
 // Conditionally set dbCredentials based on NODE_ENV
@@ -13,9 +14,13 @@ if (NODE_ENV === "production") {
     const database = getEnvVariable("DB_NAME");
     const sslRequired = getEnvVariable("DB_SSL_REQUIRED") == "true";
 
-    // Read the password from the secret file path
-    const password = getEnvVariable("DB_PASSWORD_FILE");
-    // const dbUrl = new URL(process.env.POSTGRES_URL!);
+    // ✅ Read the password from the secret file
+    const passwordFile = getEnvVariable("DB_PASSWORD_FILE");
+    const password = readFileSync(passwordFile, "utf8").trim();
+
+    // // Read the password from the secret file path
+    // const password = getEnvVariable("DB_PASSWORD_FILE");
+
     dbCredentials = {
         host,
         port: Number(port),

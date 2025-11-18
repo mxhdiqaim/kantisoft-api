@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool, PoolConfig } from "pg";
+import { readFileSync } from "fs";
 import schema from "./schema";
 import { getEnvVariable } from "../utils";
 
@@ -17,8 +18,12 @@ if (NODE_ENV === "production") {
     const database = getEnvVariable("DB_NAME");
     const sslRequired = getEnvVariable("DB_SSL_REQUIRED") == "true";
 
-    // Read the password from the secret file path
-    const password = getEnvVariable("DB_PASSWORD_FILE");
+    // Read the password from the secret file
+    const passwordFile = getEnvVariable("DB_PASSWORD_FILE");
+    const password = readFileSync(passwordFile, "utf8").trim();
+
+    // // Read the password from the secret file path
+    // const password = getEnvVariable("DB_PASSWORD_FILE");
 
     // Construct the connection URL
     const connectionString = `postgresql://${user}:${password}@${host}:${port}/${database}`;
