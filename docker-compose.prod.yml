@@ -68,17 +68,19 @@ services:
   redis_cache:
     image: redis:8-alpine
     container_name: kantisoft-redis-prod
-    command: redis-server --appendonly yes --requirepass $(cat /run/secrets/redis_password_file) --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: sh -c 'redis-server /usr/local/etc/redis/redis.conf --requirepass "$$(cat /run/secrets/redis_password_file)"'
     volumes:
       - redis_data_prod:/data
+      - ./redis.conf:/usr/local/etc/redis/redis.conf:ro
     secrets:
       - redis_password_file
     healthcheck:
-      test: [ "CMD", "redis-cli", "-a", "$$(cat /run/secrets/redis_password_file)", "ping" ]
+      test: |
+        sh -c 'redis-cli -a "$$(cat /run/secrets/redis_password_file)" ping | grep -q PONG'
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 1s
+      start_period: 10s
 
   nginx:
     image: nginx:stable-alpine
