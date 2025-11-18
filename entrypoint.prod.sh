@@ -22,6 +22,7 @@ echo "Waiting for the database at $DB_HOST:$DB_PORT..."
 
 # Use the secret file content for the password during the readiness check
 # shellcheck disable=SC2046
+# shellcheck disable=SC2155
 export DB_PASSWORD=$(cat "$DB_PASSWORD_FILE")
 
 until pg_isready -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER"; do
