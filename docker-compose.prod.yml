@@ -31,6 +31,12 @@ services:
     secrets:
       - db_password_file
       - redis_password_file
+    healthcheck:
+      test: [ "CMD", "curl", "--fail", "http://localhost:5473/" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   postgres_db:
     image: postgres:16-alpine
