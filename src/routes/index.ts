@@ -7,13 +7,21 @@ import dashboard from "./dashboard-routes";
 import stores from "./store-routes";
 import activities from "./activity-routes";
 import auth from "./auth-routes";
-
 import { protectedRoute } from "../config/jwt-config";
 import { checkStoreAccess } from "../middlewares/check-store-access";
 import { isAuthorized } from "../middlewares/is-authorised-middleware";
 import { UserRoleEnum } from "../types/enums";
+import { StatusCodes } from "http-status-codes";
 
 const router = express.Router();
+
+router.get("/health", (_req, res) => {
+    res.status(StatusCodes.OK).json({
+        status: "ok",
+        message: "API is up and running",
+        timestamp: new Date().toISOString(),
+    });
+});
 
 // Public authentication routes
 router.use("/", auth); // Handles /api/register, /api/login, /api/logout (logout is protected within auth-routes)

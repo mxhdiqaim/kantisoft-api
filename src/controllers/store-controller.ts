@@ -2,9 +2,10 @@ import { Request, Response } from "express";
 import db from "../db";
 import { stores } from "../schema/stores-schema";
 import { and, eq, or } from "drizzle-orm";
-import { handleError } from "../service/error-handling";
+import { handleError, handleError2 } from "../service/error-handling";
 import { StatusCodeEnum } from "../types/enums";
 import { logActivity } from "../service/activity-logger";
+import { StatusCodes } from "http-status-codes";
 
 export const getAllStores = async (req: Request, res: Response) => {
     try {
@@ -12,37 +13,35 @@ export const getAllStores = async (req: Request, res: Response) => {
         const storeId = currentUser?.storeId;
 
         if (!storeId) {
-            return handleError(
+            return handleError2(
                 res,
-                "Store ID not found for the authenticated user.",
-                StatusCodeEnum.FORBIDDEN,
+                "Authenticated User is not associated with any store.",
+                StatusCodes.FORBIDDEN,
             );
         }
         const allStores = await db.query.stores.findMany({
             // Optionally, you could filter for only top-level stores (not branches)
-            where: or(
-                eq(stores.id, String(storeId)),
-                eq(stores.storeParentId, String(storeId)),
-            ),
+            where: eq(stores.id, String(storeId)),
             with: {
                 branches: true, // Include all child stores (branches)
             },
         });
 
-        // // Log activity for viewing a stores
+        // // Log activity for viewing a store
         // await logActivity({
         //     userId: currentUser.id,
         //     storeId: String(storeId),
         //     action: "STORES_VIEWED",
         //     details: `All stores viewed by ${currentUser.firstName} ${currentUser.lastName}.`,
         // });
-        res.status(StatusCodeEnum.OK).json(allStores);
+        res.status(StatusCodes.OK).json(allStores);
     } catch (error) {
         console.log("error", error);
-        handleError(
+        handleError2(
             res,
             "Failed to fetch stores.",
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
         );
     }
 };
@@ -54,35 +53,41 @@ export const getStoreById = async (req: Request, res: Response) => {
         const userStoreId = currentUser?.storeId;
 
         if (!userStoreId) {
-            return handleError(
+            return handleError2(
                 res,
                 "Authentication required.",
-                StatusCodeEnum.UNAUTHORIZED,
+                StatusCodes.UNAUTHORIZED,
+            );
+        }
+
+        const uuidRegex =
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(id)) {
+            return handleError2(
+                res,
+                "Invalid store ID format.",
+                StatusCodes.BAD_REQUEST,
             );
         }
 
         const store = await db.query.stores.findFirst({
             where: or(eq(stores.id, id), eq(stores.storeParentId, id)),
             with: {
-                parent: true, // Include the parent store, if it exists
+                parent: true, // Include the parent store if it exists
                 branches: true, // Include all child stores (branches)
             },
         });
         if (!store) {
-            return handleError(
-                res,
-                "Store not found.",
-                StatusCodeEnum.NOT_FOUND,
-            );
+            return handleError2(res, "Store not found.", StatusCodes.NOT_FOUND);
         }
 
-        // IMPORTANT: Authorization check
+        // IMPORTANT: Authorisation check
         // The requested store must either be the user's store OR a branch of it
         if (store.id !== userStoreId && store.storeParentId !== userStoreId) {
-            return handleError(
+            return handleError2(
                 res,
                 "You do not have permission to view this store.",
-                StatusCodeEnum.FORBIDDEN,
+                StatusCodes.FORBIDDEN,
             );
         }
 
@@ -96,13 +101,14 @@ export const getStoreById = async (req: Request, res: Response) => {
         //     details: `Store "${store.name}" viewed by ${currentUser.firstName} ${currentUser.lastName}.`,
         // });
 
-        res.status(StatusCodeEnum.OK).json(store);
+        res.status(StatusCodes.OK).json(store);
     } catch (error) {
-        console.log("error", error);
-        handleError(
+        // console.log("error", error);
+        handleError2(
             res,
             "Failed to fetch store.",
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
         );
     }
 };
@@ -159,24 +165,24 @@ export const updateStore = async (req: Request, res: Response) => {
 
         // Authenticated and store owner check
         if (!userStoreId) {
-            return handleError(
+            return handleError2(
                 res,
                 "Authentication required.",
-                StatusCodeEnum.UNAUTHORIZED,
+                StatusCodes.UNAUTHORIZED,
             );
         }
 
-        // Authorization: Check if the store to be updated belongs to the user
+        // Authorisation: Check if the store to be updated belongs to the user
         // A manager can update their own store or a branch of their store.
         const storeToUpdate = await db.query.stores.findFirst({
             where: or(eq(stores.id, id), eq(stores.storeParentId, userStoreId)),
         });
 
         if (!storeToUpdate) {
-            return handleError(
+            return handleError2(
                 res,
                 "Store not found or you do not have permission to update it.",
-                StatusCodeEnum.FORBIDDEN,
+                StatusCodes.FORBIDDEN,
             );
         }
 
@@ -196,10 +202,10 @@ export const updateStore = async (req: Request, res: Response) => {
             .returning();
 
         if (!updatedStore) {
-            return handleError(
+            return handleError2(
                 res,
                 "Failed to update store.",
-                StatusCodeEnum.NOT_FOUND,
+                StatusCodes.NOT_FOUND,
             );
         }
 
@@ -213,13 +219,14 @@ export const updateStore = async (req: Request, res: Response) => {
             details: `Store "${updatedStore.name}" updated by ${currentUser.firstName} ${currentUser.lastName}.`,
         });
 
-        res.status(StatusCodeEnum.OK).json(updatedStore);
+        res.status(StatusCodes.OK).json(updatedStore);
     } catch (error) {
         console.log("error", error);
-        handleError(
+        handleError2(
             res,
             "Failed to update store.",
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
         );
     }
 };

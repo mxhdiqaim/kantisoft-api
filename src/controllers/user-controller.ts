@@ -12,6 +12,7 @@ import { StatusCodeEnum, UserRoleEnum, UserStatusEnum } from "../types/enums";
 import { stores } from "../schema/stores-schema";
 import { CustomRequest } from "../types/express";
 import { logActivity } from "../service/activity-logger";
+import { StatusCodes } from "http-status-codes";
 
 /**
  * @desc    Register a new Manager and their first Store
@@ -421,11 +422,11 @@ export const createUser = async (req: CustomRequest, res: Response) => {
             return handleError(
                 res,
                 "User not authenticated",
-                StatusCodeEnum.FORBIDDEN,
+                StatusCodes.FORBIDDEN,
             );
         }
 
-        // CRITICAL FIX: Get the storeId from the current user
+        // Get the storeId from the current user
         const storeId = currentUser.storeId;
         if (!storeId) {
             return handleError(
@@ -455,20 +456,20 @@ export const createUser = async (req: CustomRequest, res: Response) => {
             );
         }
 
-        // Authorization: Current user's role vs. target user's role
+        // Authorisation: Current user's role vs. target user's role
         const { role: currentRole } = currentUser;
         const { role: targetRole } = payload;
 
         // Define allowed roles for creation based on the current user's role
         const allowedCreations: { [key: string]: string[] } = {
             [UserRoleEnum.MANAGER]: [
-                // UserRoleEnum.MANAGER,
+                UserRoleEnum.MANAGER,
                 UserRoleEnum.ADMIN,
                 UserRoleEnum.USER,
                 UserRoleEnum.GUEST,
             ],
             [UserRoleEnum.ADMIN]: [
-                // UserRoleEnum.ADMIN,
+                UserRoleEnum.ADMIN,
                 UserRoleEnum.USER,
                 UserRoleEnum.GUEST,
             ],
