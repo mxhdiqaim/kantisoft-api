@@ -5,8 +5,8 @@ import {
     pgTable,
     text,
     timestamp,
-    uuid,
     unique,
+    uuid,
 } from "drizzle-orm/pg-core";
 import { stores } from "./stores-schema";
 
@@ -19,7 +19,6 @@ export const menuItems = pgTable(
         itemCode: text("itemCode"),
         price: numeric("price", { precision: 10, scale: 2 }).notNull(),
         storeId: uuid("storeId").references(() => stores.id),
-        // storeId: uuid("storeId").references(() => stores.id).notNull(),
         currentMenu: integer("currentMenu").notNull().default(0),
         minMenuLevel: integer("minMenuLevel").default(10), // Minimum level for the menu item
         isAvailable: boolean("isAvailable").notNull().default(true),
@@ -31,11 +30,11 @@ export const menuItems = pgTable(
     },
     (table) => {
         return {
-            // *** CRITICAL CHANGE 3: Add a composite unique constraint on (storeId, name) ***
+            // Add a composite unique constraint on (storeId, name)
             menuItemNameUniquePerStore: unique(
                 "menuItems_name_store_unique",
             ).on(table.storeId, table.name),
-            // Optional: If itemCode should also be unique per store, add another composite constraint:
+            // If itemCode should also be unique per store, add another composite constraint (optional)
             menuItemItemCodeUniquePerStore: unique(
                 "menuItems_itemCode_store_unique",
             ).on(table.storeId, table.itemCode),

@@ -20,7 +20,6 @@ const URL =
               "http://localhost:3000",
               "http://localhost:3001",
               "http://localhost:3003",
-              "http://localhost:*",
           ]
         : [
               `https://${process.env.LANDING_PAGE}`,
@@ -46,14 +45,6 @@ app.use(express.json({ limit: "5mb" }));
 app.use((req, res, next) => {
     next();
 });
-
-// app.get("/", (_req, res) => {
-//     res.status(200).json({
-//         status: "ok",
-//         message: "API is up and running",
-//         timestamp: new Date().toISOString(),
-//     });
-// });
 
 /** Routes */
 app.use("/api/v1", routes);

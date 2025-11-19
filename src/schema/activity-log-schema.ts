@@ -1,10 +1,10 @@
 import {
+    boolean,
+    pgEnum,
     pgTable,
     text,
     timestamp,
     uuid,
-    pgEnum,
-    boolean,
 } from "drizzle-orm/pg-core";
 import { users } from "./users-schema";
 import { stores } from "./stores-schema";
@@ -30,6 +30,13 @@ export const activityActionEnum = pgEnum("activityAction", [
     "USER_DELETED",
     "USER_UPDATED",
     "PASSWORD_CHANGED",
+    "INVENTORY_RECORD_CREATED",
+    "STOCK_ADJUSTED_SALE",
+    "STOCK_ADJUSTED_PURCHASE_RECEIVE",
+    "STOCK_ADJUSTED_ADJUSTMENT_IN",
+    "STOCK_ADJUSTED_ADJUSTMENT_OUT",
+    "STOCK_ADJUSTED_TRANSFER_IN",
+    "STOCK_ADJUSTED_TRANSFER_OUT",
 ]);
 
 export const entityTypeEnum = pgEnum("entityType", [
@@ -38,6 +45,7 @@ export const entityTypeEnum = pgEnum("entityType", [
     "user",
     "store",
     "activity",
+    "inventory",
 ]);
 
 export const activityLog = pgTable("activityLog", {

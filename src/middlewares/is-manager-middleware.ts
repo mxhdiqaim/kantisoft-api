@@ -1,7 +1,8 @@
-import { Response, NextFunction } from "express";
+import { NextFunction, Response } from "express";
 import { handleError } from "../service/error-handling";
-import { StatusCodeEnum, UserRoleEnum } from "../types/enums";
+import { UserRoleEnum } from "../types/enums";
 import { CustomRequest } from "../types/express";
+import { StatusCodes } from "http-status-codes";
 
 export const isManager = (
     req: CustomRequest,
@@ -16,6 +17,6 @@ export const isManager = (
     return handleError(
         res,
         "Access denied. System Manager role required",
-        StatusCodeEnum.FORBIDDEN,
+        StatusCodes.FORBIDDEN,
     );
 };

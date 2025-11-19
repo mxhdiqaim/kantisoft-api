@@ -246,7 +246,7 @@ export const deleteStore = async (req: Request, res: Response) => {
             );
         }
 
-        // Authorization: Check if the store to be deleted belongs to the user
+        // Authorisation: Check if the store to be deleted belongs to the user
         const storeToDelete = await db.query.stores.findFirst({
             where: or(eq(stores.id, id), eq(stores.storeParentId, userStoreId)),
         });

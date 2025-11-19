@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { pgTable, text, timestamp, uuid, pgEnum } from "drizzle-orm/pg-core";
+import { pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 export const storeTypeEnum = pgEnum("storeType", [
     "restaurant",

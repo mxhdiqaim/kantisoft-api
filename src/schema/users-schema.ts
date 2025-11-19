@@ -1,10 +1,10 @@
 import {
+    pgEnum,
     pgTable,
     text,
     timestamp,
-    uuid,
-    pgEnum,
     unique,
+    uuid,
 } from "drizzle-orm/pg-core";
 import { stores } from "./stores-schema";
 
@@ -45,18 +45,18 @@ export const users = pgTable(
     },
     (table) => {
         return {
-            // *** CRITICAL CHANGE 2: Add a composite unique constraint on (storeId, phone) ***
+            // Adding a composite unique constraint on (storeId, phone),
             // This will ensure:
-            // 1. For a given storeId, all *non-NULL* phone numbers are unique.
-            // 2. Multiple NULL phone numbers are allowed within the same storeId (standard SQL behavior for unique indexes on nullable columns).
+            // - For a given storeId, all *non-NULL* phone numbers are unique.
+            // - Multiple NULL phone numbers are allowed within the same storeId (standard SQL behaviour for unique indexes on nullable columns).
             storeIdPhoneUnique: unique("users_storeId_phone_unique").on(
                 table.storeId,
                 table.phone,
             ),
 
             // This will ensure:
-            // 1. For a given storeId, the email must be unique.
-            // 2. Since storeId is nullable, multiple users with NULL storeId can have the same email.
+            // - For a given storeId, the email must be unique.
+            // - Since storeId is nullable, multiple users with NULL storeId can have the same email.
             //    (e.g., if you have 'global' users not assigned to any specific store, or store was deleted)
             storeIdEmailUnique: unique("users_storeId_email_unique").on(
                 table.storeId,

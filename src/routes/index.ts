@@ -6,6 +6,7 @@ import orders from "./order-routes";
 import dashboard from "./dashboard-routes";
 import stores from "./store-routes";
 import activities from "./activity-routes";
+import inventory from "./inventory-routes";
 import auth from "./auth-routes";
 import { protectedRoute } from "../config/jwt-config";
 import { checkStoreAccess } from "../middlewares/check-store-access";
@@ -34,6 +35,9 @@ router.use("/users", users);
 
 // Store CRUD is for Managers only
 router.use("/stores", stores);
+
+// Inventory management routes
+router.use("/inventory", inventory);
 
 // Activity log is for Managers & admin only
 router.use(
