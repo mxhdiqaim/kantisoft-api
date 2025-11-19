@@ -146,7 +146,7 @@ export const createInventoryRecord = async (
 
         // TODO: (Future) Verify that the menuItemId actually exists in the menuItems table
 
-        // Insert new Inventory record
+        // Insert a new Inventory record
         const [newInventory] = await db
             .insert(inventory)
             .values({
@@ -202,6 +202,17 @@ export const createInventoryRecord = async (
  */
 export const adjustStock = async (req: CustomRequest, res: Response) => {
     try {
+        const currentUser = req.user?.data;
+        const storeId = currentUser?.storeId;
+
+        if (!storeId) {
+            return handleError2(
+                res,
+                "You must be associated with a store to adjust inventory.",
+                StatusCodes.FORBIDDEN,
+            );
+        }
+
         const { menuItemId } = req.params;
         const { quantityAdjustment, transactionType, notes } = req.body; // quantityAdjustment is the delta (+ or -)
         const userStoreId = req.userStoreId!;
