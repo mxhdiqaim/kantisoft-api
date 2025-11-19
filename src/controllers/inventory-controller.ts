@@ -18,9 +18,10 @@ import { getStockAdjustedAction } from "../utils/inventory-utils";
  */
 export const getAllInventory = async (req: CustomRequest, res: Response) => {
     try {
-        const userStoreId = req.userStoreId;
+        const currentUser = req.user?.data;
+        const storeId = currentUser?.storeId;
 
-        if (!userStoreId) {
+        if (!storeId) {
             return handleError2(
                 res,
                 "You must be associated with a store to view inventory.",
@@ -29,7 +30,7 @@ export const getAllInventory = async (req: CustomRequest, res: Response) => {
         }
 
         const allInventory = await db.query.inventory.findMany({
-            where: eq(inventory.storeId, userStoreId),
+            where: eq(inventory.storeId, storeId),
             orderBy: [desc(inventory.lastModified)],
             with: {
                 menuItem: { columns: { name: true, itemCode: true } },
@@ -59,10 +60,10 @@ export const getInventoryByMenuItem = async (
     res: Response,
 ) => {
     try {
-        const { menuItemId } = req.params;
-        const userStoreId = req.userStoreId;
+        const currentUser = req.user?.data;
+        const storeId = currentUser?.storeId;
 
-        if (!userStoreId) {
+        if (!storeId) {
             return handleError2(
                 res,
                 "You must be associated with a store to view inventory.",
@@ -70,9 +71,11 @@ export const getInventoryByMenuItem = async (
             );
         }
 
+        const { menuItemId } = req.params;
+
         const inventoryItem = await getInventoryByMenuItemId(
             menuItemId,
-            userStoreId,
+            storeId,
         );
 
         if (!inventoryItem) {
@@ -105,8 +108,19 @@ export const createInventoryRecord = async (
     res: Response,
 ) => {
     try {
+        const currentUser = req.user?.data;
+        const storeId = currentUser?.storeId;
+
+        if (!storeId) {
+            return handleError2(
+                res,
+                "You must be associated with a store to view inventory.",
+                StatusCodes.FORBIDDEN,
+            );
+        }
+
         const { menuItemId, quantity, minStockLevel } = req.body;
-        const userStoreId = req.userStoreId!;
+
 
         // Validation and Existence Checks
         if (!menuItemId || quantity === undefined) {
@@ -119,7 +133,7 @@ export const createInventoryRecord = async (
 
         const existingInventory = await getInventoryByMenuItemId(
             menuItemId,
-            userStoreId,
+            storeId,
         );
 
         if (existingInventory) {
@@ -137,7 +151,7 @@ export const createInventoryRecord = async (
             .insert(inventory)
             .values({
                 menuItemId,
-                storeId: userStoreId,
+                storeId: storeId,
                 quantity: quantity,
                 minStockLevel: minStockLevel,
                 // status will be set based on minStockLevel logic
@@ -147,7 +161,7 @@ export const createInventoryRecord = async (
         // Log initial stock transaction
         await db.insert(inventoryTransactions).values({
             menuItemId,
-            storeId: userStoreId,
+            storeId: storeId,
             transactionType: "adjustmentIn", // Treat initial setting as an adjustment in
             quantityChange: quantity,
             resultingQuantity: quantity,
@@ -158,7 +172,7 @@ export const createInventoryRecord = async (
         // Log activity
         await logActivity({
             userId: req.user?.data.id,
-            storeId: userStoreId,
+            storeId: storeId,
             action: "INVENTORY_RECORD_CREATED",
             entityId: newInventory.id,
             entityType: "inventory",

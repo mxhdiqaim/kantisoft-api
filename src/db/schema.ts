@@ -10,12 +10,14 @@ import * as menuItemsRelations from "../schema/relations/menu-items-relation";
 import * as ordersRelations from "../schema/relations/orders-relation";
 import * as usersRelations from "../schema/relations/user-relations";
 import * as storeRelations from "../schema/relations/store-relation";
+import * as inventoryRelations from "../schema/relations/inventory-relations";
 
 const relations = {
     ...menuItemsRelations,
     ...ordersRelations,
     ...usersRelations,
     ...storeRelations,
+    ...inventoryRelations,
 };
 
 const schema = {
