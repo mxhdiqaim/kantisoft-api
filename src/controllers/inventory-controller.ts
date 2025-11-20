@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray, ne } from "drizzle-orm";
 import { Response } from "express";
 import db from "../db";
 import { inventory } from "../schema/inventory-schema";
@@ -10,6 +10,7 @@ import {StatusCodes} from "http-status-codes";
 import {inventoryTransactions} from "../schema/inventory-schema/inventory-transaction-schema";
 import { getStockAdjustedAction } from "../utils/inventory-utils";
 import { menuItems } from "../schema/menu-items-schema";
+import { OrderItemStockUpdate } from "../types";
 
 
 /**
@@ -353,6 +354,293 @@ export const adjustStock = async (req: CustomRequest, res: Response) => {
         handleError2(
             res,
             "Problem adjusting stock level, please try again.",
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
+        );
+    }
+};
+
+/**
+ * @desc    [INTERNAL] Decrement stock levels for all items in a completed order.
+ * @route   (Internal API call - no external route needed, or use a POST route without user authentication)
+ * @access  Internal (Called by Order Controller)
+ * @body    { orderId: string, items: OrderItemStockUpdate[], performedBy: string, storeId: string }
+ */
+export const decrementStockForOrder = async (
+    orderId: string,
+    items: OrderItemStockUpdate[],
+    performedBy: string,
+    storeId: string,
+) => {
+    try {
+
+        if (!items || items.length === 0) {
+            return; // No items to process
+        }
+
+        // Fetch current inventory for all relevant items
+        const menuItemIds = items.map((item) => item.menuItemId);
+
+        // Use a standard Drizzle select query with 'inArray'
+        const currentInventoryRecords = await db
+            .select()
+            .from(inventory)
+            .where(
+                and(
+                    eq(inventory.storeId, storeId),
+                    inArray(inventory.menuItemId, menuItemIds),
+                ),
+            );
+
+        const inventoryMap = new Map(
+            currentInventoryRecords.map((item) => [item.menuItemId, item]),
+        );
+
+        // Pre-check: Ensure all items exist and have enough inventories (stocks)
+        for (const item of items) {
+            const currentRecord = inventoryMap.get(item.menuItemId);
+
+            if (!currentRecord) {
+                // This scenario means an inventory record was never created for a menu item.
+                throw new Error(
+                    `Inventory record not found for menu item ID: ${item.menuItemId}`,
+                );
+            }
+            if (currentRecord.quantity < item.quantity) {
+                // This is a critical business error. The system must prevent this.
+                throw new Error(
+                    `Insufficient stock for item ID: ${item.menuItemId}. Current: ${currentRecord.quantity}, Ordered: ${item.quantity}.`,
+                );
+            }
+        }
+
+        // Perform atomic update: Update inventory and log transactions for all items
+        await db.transaction(async (tx) => {
+            for (const item of items) {
+                const currentRecord = inventoryMap.get(item.menuItemId)!;
+                const changeAmount = -item.quantity; // Stock decreases, so quantity is negative
+                const newQuantity = currentRecord.quantity + changeAmount;
+                const minStockLevel = currentRecord.minStockLevel;
+
+                // Calculate the new status (using the helper function you planned)
+                const newStatus = calculateInventoryStatus(
+                    newQuantity,
+                    minStockLevel,
+                );
+
+                // Update Inventory record
+                await tx
+                    .update(inventory)
+                    .set({
+                        quantity: newQuantity,
+                        lastModified: new Date(),
+                        lastCountDate: new Date(),
+                        status: newStatus,
+                    })
+                    .where(
+                        and(
+                            eq(inventory.menuItemId, item.menuItemId),
+                            eq(inventory.storeId, storeId),
+                        ),
+                    );
+
+                // Insert Inventory Transaction record (Transaction Type: 'sale')
+                await tx.insert(inventoryTransactions).values({
+                    menuItemId: item.menuItemId,
+                    storeId: storeId,
+                    transactionType: "sale",
+                    quantityChange: changeAmount, // Negative value
+                    resultingQuantity: newQuantity,
+                    performedBy: performedBy,
+                    notes: `Sale via Order ID: ${orderId}`,
+                    sourceDocumentId: orderId, // Link back to the Order
+                    transactionDate: new Date(),
+                });
+            }
+        });
+
+        // Log a single activity for the overall order stock adjustment
+        await logActivity({
+            userId: performedBy,
+            storeId: storeId,
+            action: "ORDER_STOCK_DECREMENTED",
+            entityId: orderId,
+            entityType: "order",
+            details: `Stock decreased for Order ID ${orderId}.`,
+        });
+
+        return true; // Success indicator
+    } catch (error) {
+        // Log the error but re-throw it so the calling controller can roll back the order creation/update
+        console.error("Error decrementing stock for order:", error);
+        throw error;
+    }
+};
+
+/**
+ * @desc    Mark an inventory record as 'discontinued'.
+ * @route   PATCH /api/v1/inventory/discontinue/:menuItemId
+ * @access  Private (Manager/Admin only)
+ */
+export const markAsDiscontinued = async (
+    req: CustomRequest,
+    res: Response,
+) => {
+    try {
+        const currentUser = req.user?.data;
+        const storeId = currentUser?.storeId;
+
+        if (!storeId) {
+            return handleError2(
+                res,
+                "You must be associated with a store.",
+                StatusCodes.FORBIDDEN,
+            );
+        }
+
+        // Authorisation check (You may need helper middleware for this in a real app)
+        // if (currentUser.role !== 'MANAGER' && currentUser.role !== 'ADMIN') {
+        //     return handleError2(res, "Only managers or admins can discontinue inventory.", StatusCodes.FORBIDDEN);
+        // }
+
+        const { id: menuItemId } = req.params;
+        const { id: userId} = currentUser;
+        // const userId = currentUser?.id;
+
+        const [updatedInventory] = await db
+            .update(inventory)
+            .set({
+                status: "discontinued", // Set to the desired status
+                lastModified: new Date(),
+            })
+            .where(
+                and(
+                    eq(inventory.menuItemId, menuItemId),
+                    eq(inventory.storeId, storeId),
+                    // Prevent discontinuing if already discontinued
+                    ne(inventory.status, "discontinued"),
+                ),
+            )
+            .returning();
+
+        if (!updatedInventory) {
+            return handleError2(
+                res,
+                "Inventory record not found or already discontinued.",
+                StatusCodes.NOT_FOUND,
+            );
+        }
+
+        // Log activity
+        await logActivity({
+            userId: userId,
+            storeId: storeId,
+            action: "INVENTORY_DISCONTINUED",
+            entityId: updatedInventory.id,
+            entityType: "inventory",
+            details: `Inventory for Menu Item ${menuItemId} marked as discontinued.`,
+        });
+
+        res.status(StatusCodes.OK).json(updatedInventory);
+    } catch (error) {
+        handleError2(
+            res,
+            "Problem marking inventory as discontinued, please try again.",
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
+        );
+    }
+};
+
+/**
+ * @desc    Completely delete an inventory record for a menu item.
+ * @route   DELETE /api/v1/inventory/:menuItemId
+ * @access  Private (Admin/Highly Restricted)
+ */
+export const deleteInventoryRecord = async (
+    req: CustomRequest,
+    res: Response,
+) => {
+    try {
+        const currentUser = req.user?.data;
+        const storeId = currentUser?.storeId;
+
+        if (!storeId) {
+            return handleError2(
+                res,
+                "You must be associated with a store.",
+                StatusCodes.FORBIDDEN,
+            );
+        }
+
+        const { id: menuItemId } = req.params;
+        const { id: userId} = currentUser;
+        // const userId = currentUser?.id;
+
+        // Fetch the record before deleting to get the Inventory ID for logging
+        const inventoryToDelete = await getInventoryByMenuItemId(
+            menuItemId,
+            storeId,
+        );
+
+        if (!inventoryToDelete) {
+            return handleError2(
+                res,
+                "Inventory record not found.",
+                StatusCodes.NOT_FOUND,
+            );
+        }
+
+        // The 'onDelete: cascade' on `inventory.menuItemId` in the schema
+        // will automatically clean up the `inventory` record if the `menuItem` is deleted.
+        // If we only delete the `inventory` record, we must manually delete transactions.
+
+        // Since `inventory` references `menuItems` (cascade is set on the inventory side),
+        // we assume deleting the `inventory` record is the intent here.
+        // We will manually delete the transactions within a transaction for safety.
+
+        await db.transaction(async (tx) => {
+            // Delete all associated transactions first (if not cascading from the inventory table)
+            // If `inventoryTransactions` does NOT cascade delete on `inventory.menuItemId` deletion, this step is needed:
+            await tx
+                .delete(inventoryTransactions)
+                .where(
+                    and(
+                        eq(inventoryTransactions.menuItemId, menuItemId),
+                        eq(inventoryTransactions.storeId, storeId),
+                    ),
+                );
+
+            // Delete the inventory record itself
+            await tx
+                .delete(inventory)
+                .where(
+                    and(
+                        eq(inventory.menuItemId, menuItemId),
+                        eq(inventory.storeId, storeId),
+                    ),
+                )
+                .returning();
+        });
+
+
+        // Log activity
+        await logActivity({
+            userId: userId,
+            storeId: storeId,
+            action: "INVENTORY_RECORD_DELETED",
+            entityId: inventoryToDelete.id, // Use the ID of the deleted inventory record
+            entityType: "inventory",
+            details: `Inventory record for Menu Item ${menuItemId} deleted permanently.`,
+        });
+
+        res.status(StatusCodes.OK).json({
+            message: "Inventory record and all associated transactions deleted successfully.",
+        });
+    } catch (error) {
+        handleError2(
+            res,
+            "Problem deleting inventory record, please try again.",
             StatusCodes.INTERNAL_SERVER_ERROR,
             error instanceof Error ? error : undefined,
         );

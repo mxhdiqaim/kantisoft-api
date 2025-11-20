@@ -37,6 +37,9 @@ export const activityActionEnum = pgEnum("activityAction", [
     "STOCK_ADJUSTED_ADJUSTMENT_OUT",
     "STOCK_ADJUSTED_TRANSFER_IN",
     "STOCK_ADJUSTED_TRANSFER_OUT",
+    "ORDER_STOCK_DECREMENTED",
+    "INVENTORY_DISCONTINUED",
+    "INVENTORY_RECORD_DELETED",
 ]);
 
 export const entityTypeEnum = pgEnum("entityType", [

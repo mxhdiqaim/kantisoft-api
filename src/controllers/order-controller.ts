@@ -17,6 +17,7 @@ import { getPeriodDates } from "../utils/get-period-dates";
 import { generateOrderReference } from "../utils";
 import { logActivity } from "../service/activity-logger";
 import { CustomRequest } from "../types/express";
+import { decrementStockForOrder } from "./inventory-controller";
 
 export const getAllOrders = async (req: CustomRequest, res: Response) => {
     try {
@@ -228,36 +229,40 @@ export const getOrderById = async (req: CustomRequest, res: Response) => {
     }
 };
 
+/*
+    * @desc    Create a new order
+    * @route   POST /api/orders
+    * @access  Private (Seller/Manager/Admin of the same store)
+    * @body    { "sellerId": "some-uuid", "paymentMethod": "paymentMethod", "orderStatus": "orderStatus", "items": [ { "menuItemId": "uuid-for-burger", "quantity": 2 }, { "menuItemId": "uuid-for-fries", "quantity": 1 }] }
+ */
+
 export const createOrder = async (req: CustomRequest, res: Response) => {
-    // The request body should look like this:
-    // {
-    //   "sellerId": "some-uuid", (for the user taking the order)
-    //   "paymentMethod": "paymentMethod",
-    //   "orderStatus": "orderStatus",
-    //   "items": [
-    //     { "menuItemId": "uuid-for-burger", "quantity": 2 },
-    //     { "menuItemId": "uuid-for-fries", "quantity": 1 }
-    //   ]
-    // }
     try {
         const {
             sellerId,
-            // storeId,
             items,
             paymentMethod = "cash" as OrderPaymentMethodEnum,
             orderStatus = "completed" as OrderStatusEnum,
         } = req.body;
 
-        const user = req.user?.data;
+        const currentUser = req.user?.data;
+        const storeId = currentUser?.storeId;
 
         // CRITICAL FIX: Don't trust the storeId from the request body.
         // Get the storeId directly from the authenticated user.
-        const storeId = user?.storeId;
         if (!storeId) {
             return handleError(
                 res,
                 "User is not associated with a store.",
                 StatusCodeEnum.FORBIDDEN,
+            );
+        }
+
+        if (!sellerId) {
+            return handleError(
+                res,
+                "Seller is required.",
+                StatusCodeEnum.BAD_REQUEST,
             );
         }
 
@@ -269,7 +274,7 @@ export const createOrder = async (req: CustomRequest, res: Response) => {
         if (!sellerUser) {
             return handleError(
                 res,
-                "The specified seller does not belong to your store.",
+                "The specified seller does not belong to the store.",
                 StatusCodeEnum.FORBIDDEN,
             );
         }
@@ -278,21 +283,6 @@ export const createOrder = async (req: CustomRequest, res: Response) => {
             return handleError(
                 res,
                 "Order must contain at least one item.",
-                StatusCodeEnum.BAD_REQUEST,
-            );
-        }
-        if (!sellerId) {
-            return handleError(
-                res,
-                "Seller is required.",
-                StatusCodeEnum.BAD_REQUEST,
-            );
-        }
-
-        if (!storeId) {
-            return handleError(
-                res,
-                "Store is required",
                 StatusCodeEnum.BAD_REQUEST,
             );
         }
@@ -354,6 +344,30 @@ export const createOrder = async (req: CustomRequest, res: Response) => {
                 })
                 .returning({ reference: orders.reference, id: orders.id });
 
+            // Insert into the 'orderItems' table
+            const newOrderItemsData = orderItemsToInsert.map((item) => ({
+                ...item,
+                orderId: insertedOrder.id, // <-- Use the returned ID
+            }));
+            await tx.insert(orderItems).values(newOrderItemsData);
+
+            // 3. CRITICAL: DECREMENT STOCK
+            // This must run within the transaction (tx) so that if stock is not enough,
+            // the entire order (step 1 & 2) is automatically rolled back.
+            const itemsForStockDecrement = items.map(item => ({
+                menuItemId: item.menuItemId,
+                // Ensure quantity is a number for the inventory function
+                quantity: Number(item.quantity),
+                priceAtOrder: parseFloat(priceMap.get(item.menuItemId) as string)
+            }));
+
+            await decrementStockForOrder(
+                insertedOrder.id,
+                itemsForStockDecrement,
+                sellerId,
+                storeId
+            );
+
             // Log this activity after the transaction is successful
             await logActivity({
                 userId: sellerId,
@@ -364,14 +378,7 @@ export const createOrder = async (req: CustomRequest, res: Response) => {
                 details: `User created a new order with reference ${insertedOrder.reference}.`,
             });
 
-            // Insert into the 'orderItems' table
-            const newOrderItemsData = orderItemsToInsert.map((item) => ({
-                ...item,
-                orderId: insertedOrder.id, // <-- Use the returned ID
-            }));
-            await tx.insert(orderItems).values(newOrderItemsData);
-
-            // 4. Fetch and return the complete order data
+            //  Fetch and return the complete order data
             return await tx.query.orders.findFirst({
                 where: eq(orders.id, insertedOrder.id),
                 with: {
