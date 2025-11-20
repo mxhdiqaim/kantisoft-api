@@ -71,7 +71,7 @@ export const getInventoryByMenuItem = async (
             );
         }
 
-        const { menuItemId } = req.params;
+        const { id: menuItemId } = req.params;
 
         const inventoryItem = await getInventoryByMenuItemId(
             menuItemId,
@@ -213,7 +213,7 @@ export const adjustStock = async (req: CustomRequest, res: Response) => {
             );
         }
 
-        const { menuItemId } = req.params;
+        const { id: menuItemId } = req.params;
 
         const { quantityAdjustment, transactionType, notes } = req.body; // quantityAdjustment is the delta (+ or -)
         // const userStoreId = req.userStoreId!;
@@ -280,10 +280,10 @@ export const adjustStock = async (req: CustomRequest, res: Response) => {
         }
 
         // Update the Inventory table and log the Transaction (within a transaction block for safety)
-        const [updatedInventory] = await db.transaction(async (tx) => {
+        const updatedInventory = await db.transaction(async (tx) => {
 
             //  Update the Inventory record
-            await tx
+            const [updated] = await tx
                 .update(inventory)
                 .set({
                     quantity: newQuantity,
@@ -296,14 +296,15 @@ export const adjustStock = async (req: CustomRequest, res: Response) => {
                         eq(inventory.menuItemId, menuItemId),
                         eq(inventory.storeId, storeId),
                     ),
-                );
+                )
+                .returning();
 
             // Insert the Inventory Transaction record
-            return tx
+            await tx
                 .insert(inventoryTransactions)
                 .values({
                     menuItemId,
-                    storeId: storeId,
+                    storeId,
                     transactionType,
                     quantityChange: changeAmount,
                     resultingQuantity: newQuantity,
@@ -313,7 +314,7 @@ export const adjustStock = async (req: CustomRequest, res: Response) => {
                 })
                 .returning({ id: inventoryTransactions.id });
 
-            // return updated;
+            return updated;
         });
 
         // 5. Log activity
