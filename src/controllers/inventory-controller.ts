@@ -5,10 +5,11 @@ import { inventory } from "../schema/inventory-schema";
 import { handleError2} from "../service/error-handling";
 import { CustomRequest } from "../types/express";
 import { logActivity } from "../service/activity-logger";
-import {getInventoryByMenuItemId} from "../helpers";
+import { calculateInventoryStatus, getInventoryByMenuItemId } from "../helpers";
 import {StatusCodes} from "http-status-codes";
 import {inventoryTransactions} from "../schema/inventory-schema/inventory-transaction-schema";
 import { getStockAdjustedAction } from "../utils/inventory-utils";
+import { menuItems } from "../schema/menu-items-schema";
 
 
 /**
@@ -144,7 +145,21 @@ export const createInventoryRecord = async (
             );
         }
 
-        // TODO: (Future) Verify that the menuItemId actually exists in the menuItems table
+        const existingMenuItem = await db.query.menuItems.findFirst({
+            where: and(
+                eq(menuItems.id, menuItemId),
+                eq(menuItems.storeId, storeId),
+            ),
+            columns: { id: true, name: true }, // Only fetch what is needed
+        });
+
+        if (!existingMenuItem) {
+            return handleError2(
+                res,
+                `Menu item not found in your store.`,
+                StatusCodes.NOT_FOUND,
+            );
+        }
 
         // Insert a new Inventory record
         const [newInventory] = await db
@@ -196,9 +211,9 @@ export const createInventoryRecord = async (
     * @route   PATCH /api/v1/inventory/adjust-stock/:menuItemId
     * @access  Private (Store-associated users only)
     * @body    { quantityAdjustment: number, transactionType: string, notes?: string }
-    *          quantityAdjustment: positive or negative number indicating the change
-    *          transactionType: one of 'adjustmentIn', 'adjustmentOut', 'purchaseReceive'
-    *          notes: optional reason for adjustment
+    * quantityAdjustment: positive or negative number indicating the change
+    * transactionType: one of 'adjustmentIn', 'adjustmentOut', 'purchaseReceive'
+    * notes: optional reason for adjustment
  */
 export const adjustStock = async (req: CustomRequest, res: Response) => {
     try {
@@ -216,7 +231,6 @@ export const adjustStock = async (req: CustomRequest, res: Response) => {
         const { id: menuItemId } = req.params;
 
         const { quantityAdjustment, transactionType, notes } = req.body; // quantityAdjustment is the delta (+ or -)
-        // const userStoreId = req.userStoreId!;
         const userId = currentUser?.id;
 
         // Validation
@@ -270,6 +284,7 @@ export const adjustStock = async (req: CustomRequest, res: Response) => {
         // Calculate new quantity
         const currentQuantity = currentInventory.quantity;
         const newQuantity = currentQuantity + changeAmount;
+        const minStockLevel = currentInventory.minStockLevel; // Retrieve minStockLevel
 
         if (newQuantity < 0) {
             return handleError2(
@@ -278,6 +293,8 @@ export const adjustStock = async (req: CustomRequest, res: Response) => {
                 StatusCodes.BAD_REQUEST,
             );
         }
+
+        const newStatus = calculateInventoryStatus(newQuantity, minStockLevel);
 
         // Update the Inventory table and log the Transaction (within a transaction block for safety)
         const updatedInventory = await db.transaction(async (tx) => {
@@ -290,6 +307,7 @@ export const adjustStock = async (req: CustomRequest, res: Response) => {
                     lastModified: new Date(),
                     lastCountDate: new Date(),
                     // TODO: (Future) Add logic here to update 'status' based on 'newQuantity' vs 'minStockLevel'
+                    status: newStatus,
                 })
                 .where(
                     and(
