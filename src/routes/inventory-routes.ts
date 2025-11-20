@@ -7,6 +7,6 @@ const router = Router();
 router.get("/", controller.getAllInventory);
 router.get("/:id", controller.getInventoryByMenuItem);
 router.post("/create", controller.createInventoryRecord);
-router.patch("/:id", controller.adjustStock);
+router.patch("/adjust-stock/:id", controller.adjustStock);
 
 export default router;

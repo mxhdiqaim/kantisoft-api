@@ -162,16 +162,16 @@ export const createInventoryRecord = async (
         await db.insert(inventoryTransactions).values({
             menuItemId,
             storeId: storeId,
-            transactionType: "adjustmentIn", // Treat initial setting as an adjustment in
+            transactionType: "adjustmentIn", // Treat the initial setting as an adjustment in
             quantityChange: quantity,
             resultingQuantity: quantity,
-            performedBy: req.user?.data.id,
+            performedBy: currentUser?.id,
             notes: "Initial inventory setup.",
         });
 
         // Log activity
         await logActivity({
-            userId: req.user?.data.id,
+            userId: currentUser?.id,
             storeId: storeId,
             action: "INVENTORY_RECORD_CREATED",
             entityId: newInventory.id,
@@ -214,9 +214,10 @@ export const adjustStock = async (req: CustomRequest, res: Response) => {
         }
 
         const { menuItemId } = req.params;
+
         const { quantityAdjustment, transactionType, notes } = req.body; // quantityAdjustment is the delta (+ or -)
-        const userStoreId = req.userStoreId!;
-        const userId = req.user?.data.id;
+        // const userStoreId = req.userStoreId!;
+        const userId = currentUser?.id;
 
         // Validation
         if (quantityAdjustment === undefined || !transactionType) {
@@ -255,7 +256,7 @@ export const adjustStock = async (req: CustomRequest, res: Response) => {
         // Fetch current inventory
         const currentInventory = await getInventoryByMenuItemId(
             menuItemId,
-            userStoreId,
+            storeId,
         );
 
         if (!currentInventory) {
@@ -293,7 +294,7 @@ export const adjustStock = async (req: CustomRequest, res: Response) => {
                 .where(
                     and(
                         eq(inventory.menuItemId, menuItemId),
-                        eq(inventory.storeId, userStoreId),
+                        eq(inventory.storeId, storeId),
                     ),
                 );
 
@@ -302,7 +303,7 @@ export const adjustStock = async (req: CustomRequest, res: Response) => {
                 .insert(inventoryTransactions)
                 .values({
                     menuItemId,
-                    storeId: userStoreId,
+                    storeId: storeId,
                     transactionType,
                     quantityChange: changeAmount,
                     resultingQuantity: newQuantity,
@@ -318,7 +319,7 @@ export const adjustStock = async (req: CustomRequest, res: Response) => {
         // 5. Log activity
         await logActivity({
             userId: userId,
-            storeId: userStoreId,
+            storeId: storeId,
             // action: `STOCK_ADJUSTED_${transactionType.toUpperCase()}`,
             action: getStockAdjustedAction(transactionType),
             entityId: updatedInventory.id,
