@@ -10,11 +10,12 @@ import {StatusCodes} from "http-status-codes";
 import {inventoryTransactions} from "../schema/inventory-schema/inventory-transaction-schema";
 import { getStockAdjustedAction } from "../utils/inventory-utils";
 import { menuItems } from "../schema/menu-items-schema";
-import { OrderItemStockUpdate, TimePeriod } from "../types";
+import { OrderItemStockUpdate, Period } from "../types";
 import { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { lte } from "drizzle-orm/sql/expressions/conditions";
+import { getFilterDates } from "../utils/get-filter-dates";
 
-
+const TIMEZONE = "Africa/Lagos"; // Define a constant for your target timezone
 
 /**
  * @desc    Get all inventory records for the user's store
@@ -130,7 +131,7 @@ export const getTransactionsByMenuItem = async (
  * @desc    Get a summary of all inventory movements within a specified period
  * @route   GET /api/v1/inventory/transactions/report
  * @access  Private (Store-associated users only)
- * @query   ?period=week OR ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+ * @query   ?timePeriod=week OR ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
  */
 export const getHistoricalStockReport = async (
     req: CustomRequest,
@@ -148,22 +149,27 @@ export const getHistoricalStockReport = async (
             );
         }
 
-        const period = (req.query.period as TimePeriod) || undefined;
-        const { startDate, endDate } = req.query;
+        const period = req.query.period as string | undefined;
+        const startDate = req.query.startDate as string | undefined;
+        const endDate = req.query.endDate as string | undefined;
 
-        // Filter by the current user's store ID
+        // const timePeriod = (req.query.timePeriod as TimePeriod) || undefined;
+        const { finalStartDate, finalEndDate, periodUsed } = getFilterDates(
+            period as Period | undefined,
+            startDate,
+            endDate,
+            TIMEZONE // Pass the constant timezone
+        );
+
+        // Base condition: Filter by the current user's store ID
         let whereClause: SQL | undefined = eq(inventoryTransactions.storeId, storeId);
 
-        // Add date range filtering
-        if (startDate && endDate) {
-            // Convert string dates to Date objects for comparison
-            const start = new Date(startDate as string);
-            const end = new Date(endDate as string);
-
+        // 1. Construct the WHERE clause with a date filter
+        if (finalStartDate && finalEndDate) {
             whereClause = and(
                 whereClause,
-                gte(inventoryTransactions.transactionDate, start),
-                lte(inventoryTransactions.transactionDate, end),
+                gte(inventoryTransactions.transactionDate, finalStartDate),
+                lte(inventoryTransactions.transactionDate, finalEndDate),
             );
         }
 
@@ -198,6 +204,7 @@ export const getHistoricalStockReport = async (
             periodStart: startDate || 'All Time',
             periodEnd: endDate || 'All Time',
             summary: formattedReport,
+            period: periodUsed,
         });
 
     } catch (error) {
