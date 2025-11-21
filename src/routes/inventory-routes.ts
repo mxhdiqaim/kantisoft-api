@@ -8,6 +8,7 @@ const router = Router();
 
 router.get("/", controller.getAllInventory);
 router.get("/:id", controller.getInventoryByMenuItem);
+router.get("/transactions/:id", controller.getTransactionsByMenuItem);
 router.post("/create", controller.createInventoryRecord);
 router.patch("/adjust-stock/:id", controller.adjustStock);
 router.patch(

@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, ne } from "drizzle-orm";
 import { Response } from "express";
 import db from "../db";
 import { inventory } from "../schema/inventory-schema";
@@ -12,6 +12,7 @@ import { getStockAdjustedAction } from "../utils/inventory-utils";
 import { menuItems } from "../schema/menu-items-schema";
 import { OrderItemStockUpdate } from "../types";
 import { NodePgDatabase } from "drizzle-orm/node-postgres";
+import { lte } from "drizzle-orm/sql/expressions/conditions";
 
 
 
@@ -48,6 +49,76 @@ export const getAllInventory = async (req: CustomRequest, res: Response) => {
         handleError2(
             res,
             "Problem loading inventory data, please try again",
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
+        );
+    }
+};
+
+
+/**
+ * @desc    Get all inventory transaction history for a single menu item
+ * @route   GET /api/v1/inventory/transactions/:menuItemId
+ * @access  Private (Store-associated users only)
+ * @query   ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+ */
+export const getTransactionsByMenuItem = async (
+    req: CustomRequest,
+    res: Response,
+) => {
+    try {
+        const currentUser = req.user?.data;
+        const storeId = currentUser?.storeId;
+
+        if (!storeId) {
+            return handleError2(
+                res,
+                "You must be associated with a store.",
+                StatusCodes.FORBIDDEN,
+            );
+        }
+
+        const { id: menuItemId } = req.params;
+        const { startDate, endDate } = req.query;
+
+        // Base condition: Filter by the item ID and the store ID
+        let whereClause = and(
+            eq(inventoryTransactions.menuItemId, menuItemId),
+            eq(inventoryTransactions.storeId, storeId),
+        );
+
+        // Optional: Add date range filtering
+        if (startDate && endDate) {
+            whereClause = and(
+                whereClause,
+                gte(inventoryTransactions.transactionDate, new Date(startDate as string)),
+                lte(inventoryTransactions.transactionDate, new Date(endDate as string)),
+            );
+        }
+
+        const transactions = await db.query.inventoryTransactions.findMany({
+            where: whereClause,
+            orderBy: [desc(inventoryTransactions.transactionDate)],
+            with: {
+                // Fetch related data for context
+                performedByUser: { columns: { firstName: true, lastName: true } },
+                menuItem: { columns: { name: true, itemCode: true } },
+            },
+        });
+
+        if (transactions.length === 0) {
+            return handleError2(
+                res,
+                "No transaction history found for this item.",
+                StatusCodes.NOT_FOUND,
+            );
+        }
+
+        res.status(StatusCodes.OK).json(transactions);
+    } catch (error) {
+        handleError2(
+            res,
+            "Problem loading transaction history, please try again.",
             StatusCodes.INTERNAL_SERVER_ERROR,
             error instanceof Error ? error : undefined,
         );
