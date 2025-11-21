@@ -12,12 +12,13 @@ import {
     OrderStatusEnum,
     StatusCodeEnum,
 } from "../types/enums";
-import { handleError } from "../service/error-handling";
+import { handleError, handleError2 } from "../service/error-handling";
 import { getPeriodDates } from "../utils/get-period-dates";
 import { generateOrderReference } from "../utils";
 import { logActivity } from "../service/activity-logger";
 import { CustomRequest } from "../types/express";
 import { decrementStockForOrder } from "./inventory-controller";
+import { StatusCodes } from "http-status-codes";
 
 export const getAllOrders = async (req: CustomRequest, res: Response) => {
     try {
@@ -251,18 +252,18 @@ export const createOrder = async (req: CustomRequest, res: Response) => {
         // CRITICAL FIX: Don't trust the storeId from the request body.
         // Get the storeId directly from the authenticated user.
         if (!storeId) {
-            return handleError(
+            return handleError2(
                 res,
                 "User is not associated with a store.",
-                StatusCodeEnum.FORBIDDEN,
+                StatusCodes.FORBIDDEN,
             );
         }
 
         if (!sellerId) {
-            return handleError(
+            return handleError2(
                 res,
                 "Seller is required.",
-                StatusCodeEnum.BAD_REQUEST,
+                StatusCodes.BAD_REQUEST,
             );
         }
 
@@ -272,18 +273,18 @@ export const createOrder = async (req: CustomRequest, res: Response) => {
         });
 
         if (!sellerUser) {
-            return handleError(
+            return handleError2(
                 res,
                 "The specified seller does not belong to the store.",
-                StatusCodeEnum.FORBIDDEN,
+                StatusCodes.FORBIDDEN,
             );
         }
 
         if (!items || !Array.isArray(items) || items.length === 0) {
-            return handleError(
+            return handleError2(
                 res,
                 "Order must contain at least one item.",
-                StatusCodeEnum.BAD_REQUEST,
+                StatusCodes.BAD_REQUEST,
             );
         }
 
@@ -296,10 +297,10 @@ export const createOrder = async (req: CustomRequest, res: Response) => {
             .where(inArray(menuItems.id, menuItemIds));
 
         if (existingMenuItems.length !== menuItemIds.length) {
-            return handleError(
+            return handleError2(
                 res,
                 "One or more menu items not found.",
-                StatusCodeEnum.NOT_FOUND,
+                StatusCodes.NOT_FOUND,
             );
         }
 
@@ -356,7 +357,6 @@ export const createOrder = async (req: CustomRequest, res: Response) => {
             // the entire order (step 1 & 2) is automatically rolled back.
             const itemsForStockDecrement = items.map(item => ({
                 menuItemId: item.menuItemId,
-                // Ensure quantity is a number for the inventory function
                 quantity: Number(item.quantity),
                 priceAtOrder: parseFloat(priceMap.get(item.menuItemId) as string)
             }));
@@ -365,7 +365,8 @@ export const createOrder = async (req: CustomRequest, res: Response) => {
                 insertedOrder.id,
                 itemsForStockDecrement,
                 sellerId,
-                storeId
+                storeId,
+                tx, // <--- NEW FIRST ARGUMENT
             );
 
             // Log this activity after the transaction is successful
@@ -402,13 +403,14 @@ export const createOrder = async (req: CustomRequest, res: Response) => {
             });
         });
 
-        res.status(StatusCodeEnum.CREATED).json(newOrder);
+        res.status(StatusCodes.CREATED).json(newOrder);
     } catch (error) {
-        console.error(error);
-        return handleError(
+        // console.error(error);
+        return handleError2(
             res,
             "Problem creating order, please try again",
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
         );
     }
 };

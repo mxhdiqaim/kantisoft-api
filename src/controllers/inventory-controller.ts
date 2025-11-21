@@ -11,6 +11,8 @@ import {inventoryTransactions} from "../schema/inventory-schema/inventory-transa
 import { getStockAdjustedAction } from "../utils/inventory-utils";
 import { menuItems } from "../schema/menu-items-schema";
 import { OrderItemStockUpdate } from "../types";
+import { NodePgDatabase } from "drizzle-orm/node-postgres";
+
 
 
 /**
@@ -371,6 +373,7 @@ export const decrementStockForOrder = async (
     items: OrderItemStockUpdate[],
     performedBy: string,
     storeId: string,
+    tx: NodePgDatabase<any>
 ) => {
     try {
 
@@ -381,8 +384,9 @@ export const decrementStockForOrder = async (
         // Fetch current inventory for all relevant items
         const menuItemIds = items.map((item) => item.menuItemId);
 
-        // Use a standard Drizzle select query with 'inArray'
-        const currentInventoryRecords = await db
+        // Fetch current inventory records using the TRANSACTION object (tx), NOT db
+        // This ensures the stock check is part of the overall Order creation unit of work.
+        const currentInventoryRecords = await tx
             .select()
             .from(inventory)
             .where(
@@ -401,13 +405,13 @@ export const decrementStockForOrder = async (
             const currentRecord = inventoryMap.get(item.menuItemId);
 
             if (!currentRecord) {
-                // This scenario means an inventory record was never created for a menu item.
+                // If the inventory record is missing, throw an error and roll back the Order.
                 throw new Error(
                     `Inventory record not found for menu item ID: ${item.menuItemId}`,
                 );
             }
             if (currentRecord.quantity < item.quantity) {
-                // This is a critical business error. The system must prevent this.
+                // Insufficient stock, throw an error and roll back the Order.
                 throw new Error(
                     `Insufficient stock for item ID: ${item.menuItemId}. Current: ${currentRecord.quantity}, Ordered: ${item.quantity}.`,
                 );
@@ -415,59 +419,48 @@ export const decrementStockForOrder = async (
         }
 
         // Perform atomic update: Update inventory and log transactions for all items
-        await db.transaction(async (tx) => {
-            for (const item of items) {
-                const currentRecord = inventoryMap.get(item.menuItemId)!;
-                const changeAmount = -item.quantity; // Stock decreases, so quantity is negative
-                const newQuantity = currentRecord.quantity + changeAmount;
-                const minStockLevel = currentRecord.minStockLevel;
+        // REMOVE the nested db.transaction block and use the passed `tx` object
+        for (const item of items) {
+            const currentRecord = inventoryMap.get(item.menuItemId)!;
+            const changeAmount = -item.quantity;
+            const newQuantity = currentRecord.quantity + changeAmount;
+            const minStockLevel = currentRecord.minStockLevel;
 
-                // Calculate the new status (using the helper function you planned)
-                const newStatus = calculateInventoryStatus(
-                    newQuantity,
-                    minStockLevel,
+            // Calculate the new status (using the helper function you planned)
+            const newStatus = calculateInventoryStatus(
+                newQuantity,
+                minStockLevel,
+            );
+
+            // Update Inventory record using the transaction object (tx)
+            await tx
+                .update(inventory)
+                .set({
+                    quantity: newQuantity,
+                    lastModified: new Date(),
+                    lastCountDate: new Date(),
+                    status: newStatus,
+                })
+                .where(
+                    and(
+                        eq(inventory.menuItemId, item.menuItemId),
+                        eq(inventory.storeId, storeId),
+                    ),
                 );
 
-                // Update Inventory record
-                await tx
-                    .update(inventory)
-                    .set({
-                        quantity: newQuantity,
-                        lastModified: new Date(),
-                        lastCountDate: new Date(),
-                        status: newStatus,
-                    })
-                    .where(
-                        and(
-                            eq(inventory.menuItemId, item.menuItemId),
-                            eq(inventory.storeId, storeId),
-                        ),
-                    );
-
-                // Insert Inventory Transaction record (Transaction Type: 'sale')
-                await tx.insert(inventoryTransactions).values({
-                    menuItemId: item.menuItemId,
-                    storeId: storeId,
-                    transactionType: "sale",
-                    quantityChange: changeAmount, // Negative value
-                    resultingQuantity: newQuantity,
-                    performedBy: performedBy,
-                    notes: `Sale via Order ID: ${orderId}`,
-                    sourceDocumentId: orderId, // Link back to the Order
-                    transactionDate: new Date(),
-                });
-            }
-        });
-
-        // Log a single activity for the overall order stock adjustment
-        await logActivity({
-            userId: performedBy,
-            storeId: storeId,
-            action: "ORDER_STOCK_DECREMENTED",
-            entityId: orderId,
-            entityType: "order",
-            details: `Stock decreased for Order ID ${orderId}.`,
-        });
+            // Insert Inventory Transaction record using the transaction object (tx)
+            await tx.insert(inventoryTransactions).values({
+                menuItemId: item.menuItemId,
+                storeId: storeId,
+                transactionType: "sale",
+                quantityChange: changeAmount,
+                resultingQuantity: newQuantity,
+                performedBy: performedBy,
+                notes: `Sale via Order ID: ${orderId}`,
+                sourceDocumentId: orderId,
+                transactionDate: new Date(),
+            });
+        }
 
         return true; // Success indicator
     } catch (error) {

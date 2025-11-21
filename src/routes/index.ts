@@ -25,7 +25,7 @@ router.get("/health", (_req, res) => {
 });
 
 // Public authentication routes
-router.use("/", auth); // Handles /api/register, /api/login, /api/logout (logout is protected within auth-routes)
+router.use("/auth", auth); // Handles /api/v1/auth/register, /api/v1/auth/login, /api/v1/auth/logout (logout is protected within auth-routes)
 
 // All subsequent routes are protected
 router.use(protectedRoute);
