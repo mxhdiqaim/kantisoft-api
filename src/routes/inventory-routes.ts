@@ -6,16 +6,20 @@ import { UserRoleEnum } from "../types/enums";
 
 const router = Router();
 
+router.get("/transactions/report", controller.getHistoricalStockReport);
+router.get("/transactions/:id", controller.getTransactionsByMenuItem);
 router.get("/", controller.getAllInventory);
 router.get("/:id", controller.getInventoryByMenuItem);
-router.get("/transactions/:id", controller.getTransactionsByMenuItem);
+
 router.post("/create", controller.createInventoryRecord);
+
 router.patch("/adjust-stock/:id", controller.adjustStock);
 router.patch(
     "/discontinue/:id",
     isAuthorized([UserRoleEnum.MANAGER, UserRoleEnum.ADMIN]),
     controller.markAsDiscontinued,
 );
+
 router.delete(
     "/:id",
     isAuthorized([UserRoleEnum.MANAGER, UserRoleEnum.ADMIN]),

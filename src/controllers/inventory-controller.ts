@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray, ne } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, ne, sql, SQL } from "drizzle-orm";
 import { Response } from "express";
 import db from "../db";
 import { inventory } from "../schema/inventory-schema";
@@ -10,7 +10,7 @@ import {StatusCodes} from "http-status-codes";
 import {inventoryTransactions} from "../schema/inventory-schema/inventory-transaction-schema";
 import { getStockAdjustedAction } from "../utils/inventory-utils";
 import { menuItems } from "../schema/menu-items-schema";
-import { OrderItemStockUpdate } from "../types";
+import { OrderItemStockUpdate, TimePeriod } from "../types";
 import { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { lte } from "drizzle-orm/sql/expressions/conditions";
 
@@ -124,6 +124,93 @@ export const getTransactionsByMenuItem = async (
         );
     }
 };
+
+
+/**
+ * @desc    Get a summary of all inventory movements within a specified period
+ * @route   GET /api/v1/inventory/transactions/report
+ * @access  Private (Store-associated users only)
+ * @query   ?period=week OR ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+ */
+export const getHistoricalStockReport = async (
+    req: CustomRequest,
+    res: Response,
+) => {
+    try {
+        const currentUser = req.user?.data;
+        const storeId = currentUser?.storeId;
+
+        if (!storeId) {
+            return handleError2(
+                res,
+                "You must be associated with a store to view reports.",
+                StatusCodes.FORBIDDEN,
+            );
+        }
+
+        const period = (req.query.period as TimePeriod) || undefined;
+        const { startDate, endDate } = req.query;
+
+        // Filter by the current user's store ID
+        let whereClause: SQL | undefined = eq(inventoryTransactions.storeId, storeId);
+
+        // Add date range filtering
+        if (startDate && endDate) {
+            // Convert string dates to Date objects for comparison
+            const start = new Date(startDate as string);
+            const end = new Date(endDate as string);
+
+            whereClause = and(
+                whereClause,
+                gte(inventoryTransactions.transactionDate, start),
+                lte(inventoryTransactions.transactionDate, end),
+            );
+        }
+
+        // Use SQL aggregation to sum the quantityChange grouped by transactionType
+        const report = await db
+            .select({
+                transactionType: inventoryTransactions.transactionType,
+                // Sum the quantityChange and ensure it's returned as a numeric type (or string to be parsed later)
+                totalQuantityMoved: sql<string>`SUM(${inventoryTransactions.quantityChange})`.as('totalQuantityMoved'),
+            })
+            .from(inventoryTransactions)
+            .where(whereClause)
+            .groupBy(inventoryTransactions.transactionType);
+
+
+        // Format the results for a cleaner response object
+        const formattedReport = report.map(item => ({
+            type: item.transactionType,
+            // Parse the sum string to a float/number
+            totalChange: parseFloat(item.totalQuantityMoved || '0'),
+
+            // Helpful label based on the transaction type
+            label: item.transactionType === 'sale' ? 'Total Units Sold (Decrease)' :
+                item.transactionType === 'adjustmentOut' ? 'Total Loss/Waste (Decrease)' :
+                    item.transactionType === 'purchaseReceive' ? 'Total Units Received (Increase)' :
+                        item.transactionType === 'adjustmentIn' ? 'Total Units Adjusted In (Increase)' :
+                            item.transactionType,
+        }));
+
+
+        res.status(StatusCodes.OK).json({
+            periodStart: startDate || 'All Time',
+            periodEnd: endDate || 'All Time',
+            summary: formattedReport,
+        });
+
+    } catch (error) {
+        // console.error(error);
+        handleError2(
+            res,
+            "Problem generating stock report, please try again.",
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
+        );
+    }
+};
+
 
 /**
  * @desc    Get a single inventory record by Menu Item ID
