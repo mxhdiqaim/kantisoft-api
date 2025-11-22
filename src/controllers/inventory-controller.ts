@@ -1,3 +1,4 @@
+// @typescript-eslint/no-explicit-any
 import { and, desc, eq, gte, inArray, ne, sql, SQL } from "drizzle-orm";
 import { Response } from "express";
 import db from "../db";
