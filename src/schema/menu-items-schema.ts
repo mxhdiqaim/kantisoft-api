@@ -1,6 +1,5 @@
 import {
     boolean,
-    integer,
     numeric,
     pgTable,
     text,
@@ -19,8 +18,8 @@ export const menuItems = pgTable(
         itemCode: text("itemCode"),
         price: numeric("price", { precision: 10, scale: 2 }).notNull(),
         storeId: uuid("storeId").references(() => stores.id),
-        currentMenu: integer("currentMenu").notNull().default(0),
-        minMenuLevel: integer("minMenuLevel").default(10), // Minimum level for the menu item
+        // currentMenu: integer("currentMenu").notNull().default(0),
+        // minMenuLevel: integer("minMenuLevel").default(10), // Minimum level for the menu item
         isAvailable: boolean("isAvailable").notNull().default(true),
         createdAt: timestamp("createdAt").defaultNow().notNull(),
         lastModified: timestamp("lastModified")

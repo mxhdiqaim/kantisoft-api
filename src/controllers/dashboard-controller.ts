@@ -202,8 +202,8 @@ export const getInventorySummary = async (
                 id: menuItems.id,
                 name: menuItems.name,
                 isAvailable: menuItems.isAvailable,
-                currentMenu: menuItems.currentMenu,
-                minMenuLevel: menuItems.minMenuLevel,
+                // currentMenu: menuItems.currentMenu,
+                // minMenuLevel: menuItems.minMenuLevel,
             })
             .from(menuItems)
             .where(and(whereClause, sql`${!menuItems.isAvailable}`));
@@ -219,9 +219,9 @@ export const getInventorySummary = async (
         res.status(StatusCodeEnum.OK).json({
             totalLowStockItems: lowStockItems.length,
             totalOutOfStockItems: outOfStockItems.length,
-            lowStockDetails: lowStockItems.filter(
-                (item) => item.currentMenu > 0,
-            ), // Items that are low but not zero
+            // lowStockDetails: lowStockItems.filter(
+            //     (item) => item.currentMenu > 0,
+            // ), // Items that are low but not zero
             outOfStockDetails: outOfStockItems,
         });
     } catch (error) {
