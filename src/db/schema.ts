@@ -17,6 +17,7 @@ const relations = {
     ...ordersRelations,
     ...usersRelations,
     ...storeRelations,
+    // ...inventoryTransactionsRelations,
     ...inventoryRelations,
 };
 
