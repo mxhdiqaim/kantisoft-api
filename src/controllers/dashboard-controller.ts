@@ -3,12 +3,14 @@ import db from "../db";
 import { sql, sum, count, desc, gte, lt, and, eq, min, max } from "drizzle-orm";
 import { getPeriodDates } from "../utils/get-period-dates";
 import { orderItems, orders } from "../schema/orders-schema";
-import { handleError } from "../service/error-handling";
+import { handleError, handleError2 } from "../service/error-handling";
 import { StatusCodeEnum } from "../types/enums";
 import { OrderBy, Period } from "../types";
 import { menuItems } from "../schema/menu-items-schema";
 import moment from "moment-timezone";
 import { CustomRequest } from "../types/express";
+import { inventory } from "../schema/inventory-schema";
+import { StatusCodes } from "http-status-codes";
 
 /**
  * @description Get core sales summary metrics (Revenue, Order Count, Avg Order Value)
@@ -191,45 +193,63 @@ export const getInventorySummary = async (
     res: Response,
 ) => {
     try {
-        const userStoreId = req.userStoreId!; // Get storeId from middleware
+        const currentUser = req.user?.data;
+        const storeId = currentUser?.storeId;
+        // const userStoreId = req.userStoreId!; // Get storeId from middleware
 
-        // CRITICAL FIX: The whereClause should ONLY be the storeId condition.
-        // If `userStoreId` is defined (which it should be), it should never be undefined.
-        const whereClause = eq(menuItems.storeId, userStoreId);
+        if (!storeId) {
+            return handleError2(
+                res,
+                "User must be belong to a store to access this feature.",
+                StatusCodes.BAD_REQUEST,
+            );
+        }
+
+        const outOfStockItems = await db
+            .select({
+                id: menuItems.id,
+                name: menuItems.name,
+                isAvailable: menuItems.isAvailable,
+                quantity: inventory.quantity, // Include quantity for context
+            })
+            .from(menuItems)
+            .innerJoin(inventory, eq(inventory.menuItemId, menuItems.id)) // Join inventory
+            .where(
+                and(
+                    eq(menuItems.storeId, storeId),
+                    eq(inventory.status, "outOfStock"), // Filter by new status enum
+                ),
+            );
 
         const lowStockItems = await db
             .select({
                 id: menuItems.id,
                 name: menuItems.name,
                 isAvailable: menuItems.isAvailable,
-                // currentMenu: menuItems.currentMenu,
-                // minMenuLevel: menuItems.minMenuLevel,
+                quantity: inventory.quantity, // Include quantity for context
             })
             .from(menuItems)
-            .where(and(whereClause, sql`${!menuItems.isAvailable}`));
-
-        const outOfStockItems = await db
-            .select({
-                id: menuItems.id,
-                name: menuItems.name,
-            })
-            .from(menuItems)
-            .where(and(whereClause, eq(menuItems.isAvailable, false)));
+            .innerJoin(inventory, eq(inventory.menuItemId, menuItems.id)) // Join inventory
+            .where(
+                and(
+                    eq(menuItems.storeId, storeId),
+                    eq(inventory.status, "lowStock"), // Filter by new status enum
+                ),
+            );
 
         res.status(StatusCodeEnum.OK).json({
             totalLowStockItems: lowStockItems.length,
             totalOutOfStockItems: outOfStockItems.length,
-            // lowStockDetails: lowStockItems.filter(
-            //     (item) => item.currentMenu > 0,
-            // ), // Items that are low but not zero
+            lowStockDetails: lowStockItems,
             outOfStockDetails: outOfStockItems,
         });
     } catch (error) {
-        console.error("Error fetching inventory summary:", error);
-        return handleError(
+        // console.error("Error fetching inventory summary:", error);
+        return handleError2(
             res,
             "Failed to retrieve inventory summary.",
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined
         );
     }
 };
