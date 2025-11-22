@@ -6,9 +6,9 @@ import { UserRoleEnum } from "../types/enums";
 
 const router = Router();
 
+router.get("/", controller.getAllInventory);
 router.get("/transactions/report", controller.getHistoricalStockReport);
 router.get("/transactions/:id", controller.getTransactionsByMenuItem);
-router.get("/", controller.getAllInventory);
 router.get("/:id", controller.getInventoryByMenuItem);
 
 router.post("/create", controller.createInventoryRecord);

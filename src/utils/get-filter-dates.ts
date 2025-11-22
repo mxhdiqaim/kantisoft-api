@@ -52,9 +52,8 @@ export const getFilterDates = (
                 // Should not happen if 'all-time' is excluded, but handles unexpected string
                 periodUsed = "all-time";
         }
-    }
-    // Handle Custom Date Range
-    else if (customStartDate && customEndDate) {
+    } else if (customStartDate && customEndDate) {
+        // Handle Custom Date Range
         periodUsed = "custom";
 
         // Ensure custom dates are parsed and truncated to start/end of day for filtering accuracy
@@ -63,9 +62,24 @@ export const getFilterDates = (
             .startOf("day")
             .toDate();
         finalEndDate = moment(customEndDate).tz(timezone).endOf("day").toDate();
-    }
-    // Default to All Time
-    else {
+        // eslint-disable-next-line no-dupe-else-if
+    } else if (customStartDate && customEndDate) {
+        periodUsed = "custom";
+
+        // CRITICAL FIX: Explicitly tell a moment what format to expect (DD/MM/YYYY)
+        // If the date is invalid, moment() will still return a moment object,
+        // so you might want to add validation here, but for format parsing:
+
+        finalStartDate = moment(customStartDate, "DD/MM/YYYY") // <-- FIX: Specify an input format
+            .tz(timezone)
+            .startOf("day")
+            .toDate();
+        finalEndDate = moment(customEndDate, "DD/MM/YYYY") // <-- FIX: Specify input format
+            .tz(timezone)
+            .endOf("day")
+            .toDate();
+    } else {
+        // Default to All Time
         periodUsed = "all-time";
         // Dates remain undefined, resulting in no filtering
     }
