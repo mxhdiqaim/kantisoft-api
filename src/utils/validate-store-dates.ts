@@ -4,7 +4,7 @@ import { handleError2 } from "../service/error-handling";
 import { StatusCodes } from "http-status-codes";
 import { TIMEZONE } from "../constant";
 import { TimePeriod } from "../types";
-import { getFilterDates } from "./get-period-dates";
+import { getFilterDates } from "./get-filter-dates";
 
 export const validateStoreAndExtractDates = (
     req: CustomRequest,
