@@ -1,16 +1,17 @@
 import { Response } from "express";
 import db from "../db";
-import { sql, sum, count, desc, gte, lt, and, eq, min, max } from "drizzle-orm";
-import { getPeriodDates } from "../utils/get-period-dates";
+import { and, count, desc, eq, gte, lt, max, min, sql, sum, lte, SQL } from "drizzle-orm";
+import { getFilterDates, getPeriodDates } from "../utils/get-period-dates";
 import { orderItems, orders } from "../schema/orders-schema";
 import { handleError, handleError2 } from "../service/error-handling";
 import { StatusCodeEnum } from "../types/enums";
-import { OrderBy, Period } from "../types";
+import { OrderBy, Period, TimePeriod } from "../types";
 import { menuItems } from "../schema/menu-items-schema";
 import moment from "moment-timezone";
 import { CustomRequest } from "../types/express";
 import { inventory } from "../schema/inventory-schema";
 import { StatusCodes } from "http-status-codes";
+import { TIMEZONE } from "../constant";
 
 /**
  * @description Get core sales summary metrics (Revenue, Order Count, Avg Order Value)
@@ -411,7 +412,6 @@ export const getInventoryValuationAndHealth = async (
     try {
         const currentUser = req.user?.data;
         const storeId = currentUser?.storeId;
-        // const storeId = req.userStoreId!; // Get storeId from middleware
 
         if (!storeId) {
             return handleError2(
@@ -419,6 +419,33 @@ export const getInventoryValuationAndHealth = async (
                 "User must be belong to a store to access this feature.",
                 StatusCodes.BAD_REQUEST,
             );
+        }
+
+        // Extract query parameters
+        const timePeriod = req.query.timePeriod as string | undefined;
+        const startDate = req.query.startDate as string | undefined;
+        const endDate = req.query.endDate as string | undefined;
+
+        // Call the filtering utility
+        const { startDate: finalStartDate, endDate: finalEndDate, periodUsed } = getFilterDates(
+            timePeriod as TimePeriod | undefined,
+            startDate,
+            endDate,
+            TIMEZONE,
+        );
+
+        // Construct the base WHERE clause with the store ID
+        let whereClause: SQL | undefined = eq(inventory.storeId, storeId);
+
+        // ADD DATE FILTERING (e.g., filtering inventory records by last modified date)
+        if (finalStartDate && finalEndDate) {
+            whereClause = and(
+                whereClause,
+                gte(inventory.lastModified, finalStartDate), // Filter records modified AFTER start date
+                lte(inventory.lastModified, finalEndDate),   // Filter records modified BEFORE end date
+            );
+
+            // TODO: will add filter by 'inventory.lastCountDate'
         }
 
         // Fetch all inventory records for the store and join with menuItems to get the price
@@ -431,7 +458,7 @@ export const getInventoryValuationAndHealth = async (
             })
             .from(inventory)
             .innerJoin(menuItems, eq(inventory.menuItemId, menuItems.id))
-            .where(eq(inventory.storeId, storeId));
+            .where(whereClause);
 
         let totalInventoryValue = 0;
         let totalTrackedItems = 0;
@@ -447,7 +474,7 @@ export const getInventoryValuationAndHealth = async (
             totalInventoryValue += quantity * price;
 
             // Count health status
-            if (quantity > 0 && item.status !== 'discontinued') {
+            if (quantity > 0 && item.status !== "discontinued") {
                 inStockItemsCount++;
             }
             if (quantity <= 0) {
@@ -457,20 +484,23 @@ export const getInventoryValuationAndHealth = async (
             // Note: 'lowStock' count can be derived from the existing getInventorySummary if needed
         }
 
-        const stockedItemsPercentage = totalTrackedItems > 0
-            ? (inStockItemsCount / totalTrackedItems) * 100
-            : 0;
+        const stockedItemsPercentage =
+            totalTrackedItems > 0
+                ? (inStockItemsCount / totalTrackedItems) * 100
+                : 0;
 
         const formattedTotalValue = totalInventoryValue.toFixed(2);
 
         res.status(StatusCodes.OK).json({
+            timePeriod: periodUsed,
+            startDate: finalStartDate ? finalStartDate.toISOString() : 'All Time',
+            endDate: finalEndDate ? finalEndDate.toISOString() : 'All Time',
             totalInventoryValue: formattedTotalValue,
             totalTrackedItems,
             inStockItemsCount,
             outOfStockItemsCount,
             stockedItemsPercentage: stockedItemsPercentage.toFixed(2),
         });
-
     } catch (error) {
         // console.error("Error fetching inventory health and valuation:", error);
         return handleError2(
