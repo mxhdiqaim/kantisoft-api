@@ -1,17 +1,17 @@
 import { Response } from "express";
 import db from "../db";
 import { and, count, desc, eq, gte, lt, max, min, sql, sum, lte, SQL } from "drizzle-orm";
-import { getFilterDates, getPeriodDates } from "../utils/get-period-dates";
+import { getPeriodDates } from "../utils/get-period-dates";
 import { orderItems, orders } from "../schema/orders-schema";
 import { handleError, handleError2 } from "../service/error-handling";
 import { StatusCodeEnum } from "../types/enums";
-import { OrderBy, Period, TimePeriod } from "../types";
+import { OrderBy, Period } from "../types";
 import { menuItems } from "../schema/menu-items-schema";
 import moment from "moment-timezone";
 import { CustomRequest } from "../types/express";
 import { inventory } from "../schema/inventory-schema";
 import { StatusCodes } from "http-status-codes";
-import { TIMEZONE } from "../constant";
+import { validateStoreAndExtractDates } from "./validate-store-dates";
 
 /**
  * @description Get core sales summary metrics (Revenue, Order Count, Avg Order Value)
@@ -22,39 +22,10 @@ import { TIMEZONE } from "../constant";
  */
 export const getSalesSummary = async (req: CustomRequest, res: Response) => {
     try {
-        const currentUser = req.user?.data;
-        const storeId = currentUser?.storeId;
+        const validated = validateStoreAndExtractDates(req, res);
+        if (!validated) return; // Error already handled
 
-        if(!storeId){
-            return handleError2(
-                res,
-                "User must be belong to a store to access this feature.",
-                StatusCodes.BAD_REQUEST,
-            );
-        }
-
-        // Extract query parameters
-        const timePeriod = req.query.timePeriod as string | undefined;
-        const startDate = req.query.startDate as string | undefined;
-        const endDate = req.query.endDate as string | undefined;
-
-        // const period = (req.query.period as Period) || "today";
-        // const timezone = "Africa/Lagos";
-        // const userStoreId = req.userStoreId!; // Get storeId from middleware
-
-
-        // const { startDate, endDate } = getPeriodDates(
-        //     period as Period,
-        //     timezone,
-        // );
-
-        // Call the filtering utility
-        const { startDate: finalStartDate, endDate: finalEndDate, periodUsed } = getFilterDates(
-            timePeriod as TimePeriod | undefined,
-            startDate,
-            endDate,
-            TIMEZONE,
-        );
+        const { storeId, finalStartDate, finalEndDate, periodUsed } = validated;
 
         // Construct the base WHERE clause with the store ID
         let whereClause: SQL | undefined  = eq(orders.storeId, storeId);
@@ -115,32 +86,25 @@ export const getSalesSummary = async (req: CustomRequest, res: Response) => {
  * @queryParam timezone string (e.g., 'Africa/Lagos')
  */
 export const getTopSells = async (req: CustomRequest, res: Response) => {
-    const limit = parseInt(req.query.limit as string) || 5;
-    const orderBy = (req.query.orderBy as OrderBy) || "quantity"; // 'quantity' or 'revenue'
-    const period = (req.query.period as Period) || "month";
-    const timezone = "Africa/Lagos";
-    const userStoreId = req.userStoreId!; // Get storeId from middleware
-
     try {
-        const { startDate, endDate } = getPeriodDates(
-            period as Period,
-            timezone,
-        );
+        const limit = parseInt(req.query.limit as string) || 5;
+        const orderBy = (req.query.orderBy as OrderBy) || "quantity"; // 'quantity' or 'revenue'
 
-        let whereClause;
+        const validated = validateStoreAndExtractDates(req, res);
+        if (!validated) return; // Error already handled
 
-        if (startDate && endDate) {
+        const { storeId, finalStartDate, finalEndDate, periodUsed } = validated;
+
+        // Construct the base WHERE clause with the store ID
+        let whereClause: SQL | undefined  = eq(orders.storeId, storeId);
+
+        if (finalStartDate && finalEndDate) {
             whereClause = and(
-                gte(orders.orderDate, startDate),
-                lt(orders.orderDate, endDate),
+                whereClause,
+                gte(orders.orderDate, finalStartDate),
+                lt(orders.orderDate, finalEndDate),
             );
         }
-
-        // Apply storeId filter for multi-tenancy
-        const storeCondition = eq(orders.storeId, userStoreId);
-        whereClause = whereClause
-            ? and(whereClause, storeCondition)
-            : storeCondition; // CRITICAL FIX: Always include storeCondition
 
         const topItemsQuery = db
             .select({
@@ -154,21 +118,19 @@ export const getTopSells = async (req: CustomRequest, res: Response) => {
                 ).as("totalRevenueGenerated"),
             })
             .from(orderItems)
-            .innerJoin(menuItems, eq(orderItems.menuItemId, menuItems.id))
             .innerJoin(orders, eq(orderItems.orderId, orders.id))
+            .innerJoin(menuItems, eq(orderItems.menuItemId, menuItems.id))
             .where(whereClause)
             .groupBy(orderItems.menuItemId, menuItems.name);
 
+
         let orderedQuery;
 
+        // Determine ORDER BY clause
         if (orderBy === "revenue") {
-            orderedQuery = topItemsQuery.orderBy(
-                desc(
-                    sum(
-                        sql`${orderItems.quantity} * ${orderItems.priceAtOrder}`,
-                    ),
-                ),
-            );
+            // Note: The sum column used in SELECT must be explicitly repeated for the ORDER BY
+            const revenueSum = sum(sql`${orderItems.quantity} * ${orderItems.priceAtOrder}`);
+            orderedQuery = topItemsQuery.orderBy(desc(revenueSum));
         } else {
             orderedQuery = topItemsQuery.orderBy(
                 desc(sum(orderItems.quantity)),
@@ -177,24 +139,28 @@ export const getTopSells = async (req: CustomRequest, res: Response) => {
 
         const topItems = await orderedQuery.limit(limit);
 
-        const topSells = topItems.map((m) => ({
-            ...m,
-            totalQuantitySold: parseFloat(m.totalQuantitySold || "0"),
+        const topSells = topItems.map((topItem) => ({
+            timePeriod: periodUsed,
+            startDate: finalStartDate ? finalStartDate.toISOString() : 'All Time',
+            endDate: finalEndDate ? finalEndDate.toISOString() : 'All Time',
+            ...topItem,
+            totalQuantitySold: parseFloat(topItem.totalQuantitySold || "0"),
             totalRevenueGenerated: parseFloat(
-                m.totalRevenueGenerated || "0",
+                topItem.totalRevenueGenerated || "0",
             ).toFixed(2),
         }));
 
-        res.status(StatusCodeEnum.OK).json(topSells);
+        res.status(StatusCodes.OK).json(topSells);
     } catch (error) {
-        console.error(
-            `Error fetching top products for period ${period}:`,
-            error,
-        );
-        return handleError(
+        // console.error(
+        //     `Error fetching top products for period ${period}:`,
+        //     error,
+        // );
+        return handleError2(
             res,
-            `Failed to retrieve top products for ${period}.`,
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            `Failed to retrieve top products`,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined
         );
     }
 };
@@ -425,29 +391,10 @@ export const getInventoryValuationAndHealth = async (
     res: Response,
 ) => {
     try {
-        const currentUser = req.user?.data;
-        const storeId = currentUser?.storeId;
+        const validated = validateStoreAndExtractDates(req, res);
+        if (!validated) return; // Error already handled
 
-        if (!storeId) {
-            return handleError2(
-                res,
-                "User must be belong to a store to access this feature.",
-                StatusCodes.BAD_REQUEST,
-            );
-        }
-
-        // Extract query parameters
-        const timePeriod = req.query.timePeriod as string | undefined;
-        const startDate = req.query.startDate as string | undefined;
-        const endDate = req.query.endDate as string | undefined;
-
-        // Call the filtering utility
-        const { startDate: finalStartDate, endDate: finalEndDate, periodUsed } = getFilterDates(
-            timePeriod as TimePeriod | undefined,
-            startDate,
-            endDate,
-            TIMEZONE,
-        );
+        const { storeId, finalStartDate, finalEndDate, periodUsed } = validated;
 
         // Construct the base WHERE clause with the store ID
         let whereClause: SQL | undefined = eq(inventory.storeId, storeId);
