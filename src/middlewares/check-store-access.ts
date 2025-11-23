@@ -1,7 +1,8 @@
-import { Response, NextFunction } from "express";
-import { handleError } from "../service/error-handling";
-import { StatusCodeEnum } from "../types/enums";
+import { NextFunction, Response } from "express";
+import { handleError2 } from "../service/error-handling";
+// import { StatusCodeEnum } from "../types/enums";
 import { CustomRequest } from "../types/express";
+import { StatusCodes } from "http-status-codes";
 
 /**
  * Middleware to ensure that Admins and Users can only access resources
@@ -15,10 +16,10 @@ export const checkStoreAccess = (
     const currentUser = req.user?.data; // req.user is typed from CustomRequest / global augmentation
 
     if (!currentUser || !currentUser.storeId) {
-        return handleError(
+        return handleError2(
             res,
             "Authentication required or user not associated with a store.",
-            StatusCodeEnum.UNAUTHORIZED,
+            StatusCodes.UNAUTHORIZED,
         );
     }
 

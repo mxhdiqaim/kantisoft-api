@@ -21,40 +21,52 @@ import { TIMEZONE } from "../constant";
  * @queryParam timezone string (e.g., 'Africa/Lagos') - defaults if not provided
  */
 export const getSalesSummary = async (req: CustomRequest, res: Response) => {
-    const period = (req.query.period as Period) || "today";
-    const timezone = "Africa/Lagos";
-    const userStoreId = req.userStoreId!; // Get storeId from middleware
-
     try {
-        const { startDate, endDate } = getPeriodDates(
-            period as Period,
-            timezone,
-        );
+        const currentUser = req.user?.data;
+        const storeId = currentUser?.storeId;
 
-        let whereClause;
-
-        // Apply date range filter first if applicable
-        if (startDate && endDate) {
-            whereClause = and(
-                gte(orders.orderDate, startDate),
-                lt(orders.orderDate, endDate),
+        if(!storeId){
+            return handleError2(
+                res,
+                "User must be belong to a store to access this feature.",
+                StatusCodes.BAD_REQUEST,
             );
         }
 
-        // Always apply storeId filter for multi-tenancy
-        // If date range is absent, storeCondition becomes the primary whereClause
-        const storeCondition = eq(orders.storeId, userStoreId);
-        whereClause = whereClause
-            ? and(whereClause, storeCondition)
-            : storeCondition; // CRITICAL FIX: Always include storeCondition
+        // Extract query parameters
+        const timePeriod = req.query.timePeriod as string | undefined;
+        const startDate = req.query.startDate as string | undefined;
+        const endDate = req.query.endDate as string | undefined;
 
-        // // If the user is an Admin, add their storeId to the where clause
-        // if (userStoreId) {
-        //     const storeCondition = eq(orders.storeId, userStoreId);
-        //     whereClause = whereClause
-        //         ? and(whereClause, storeCondition)
-        //         : storeCondition;
-        // }
+        // const period = (req.query.period as Period) || "today";
+        // const timezone = "Africa/Lagos";
+        // const userStoreId = req.userStoreId!; // Get storeId from middleware
+
+
+        // const { startDate, endDate } = getPeriodDates(
+        //     period as Period,
+        //     timezone,
+        // );
+
+        // Call the filtering utility
+        const { startDate: finalStartDate, endDate: finalEndDate, periodUsed } = getFilterDates(
+            timePeriod as TimePeriod | undefined,
+            startDate,
+            endDate,
+            TIMEZONE,
+        );
+
+        // Construct the base WHERE clause with the store ID
+        let whereClause: SQL | undefined  = eq(orders.storeId, storeId);
+
+        // Apply date range filter first if applicable
+        if (finalStartDate && finalEndDate) {
+            whereClause = and(
+                whereClause,
+                gte(orders.orderDate, finalStartDate),
+                lt(orders.orderDate, finalEndDate),
+            );
+        }
 
         const result = await db
             .select({
@@ -68,7 +80,9 @@ export const getSalesSummary = async (req: CustomRequest, res: Response) => {
         const summary = result[0];
 
         const salesSummary = {
-            period,
+            period: periodUsed,
+            startDate: finalStartDate ? finalStartDate.toISOString() : 'All Time',
+            endDate: finalEndDate ? finalEndDate.toISOString() : 'All Time',
             totalRevenue: parseFloat(summary.totalRevenue || "0").toFixed(2),
             totalOrders: parseInt(String(summary.totalOrders || "0")),
             avgOrderValue: parseFloat(
@@ -76,16 +90,17 @@ export const getSalesSummary = async (req: CustomRequest, res: Response) => {
             ).toFixed(2),
         };
 
-        res.status(StatusCodeEnum.OK).json(salesSummary);
+        res.status(StatusCodes.OK).json(salesSummary);
     } catch (error) {
-        console.error(
-            `Error fetching sales summary for period ${period}:`,
-            error,
-        );
-        return handleError(
+        // console.error(
+        //     `Error fetching sales summary for period ${period}:`,
+        //     error,
+        // );
+        return handleError2(
             res,
-            `Failed to retrieve sales summary for ${period}.`,
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            `Failed to retrieve sales summary.`,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined
         );
     }
 };
