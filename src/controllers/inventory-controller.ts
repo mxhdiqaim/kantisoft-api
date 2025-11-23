@@ -11,12 +11,10 @@ import {StatusCodes} from "http-status-codes";
 import {inventoryTransactions} from "../schema/inventory-schema/inventory-transaction-schema";
 import { getStockAdjustedAction } from "../utils/inventory-utils";
 import { menuItems } from "../schema/menu-items-schema";
-import { OrderItemStockUpdate, Period } from "../types";
+import { OrderItemStockUpdate } from "../types";
 import { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { lte } from "drizzle-orm/sql/expressions/conditions";
-import { getFilterDates } from "../utils/get-filter-dates";
-
-const TIMEZONE = "Africa/Lagos"; // Define a constant for your target timezone
+import { validateStoreAndExtractDates } from "../utils/validate-store-dates";
 
 /**
  * @desc    Get all inventory records for the user's store
@@ -139,28 +137,10 @@ export const getHistoricalStockReport = async (
     res: Response,
 ) => {
     try {
-        const currentUser = req.user?.data;
-        const storeId = currentUser?.storeId;
+        const validated = validateStoreAndExtractDates(req, res);
+        if (!validated) return; // Error already handled
 
-        if (!storeId) {
-            return handleError2(
-                res,
-                "You must be associated with a store to view reports.",
-                StatusCodes.FORBIDDEN,
-            );
-        }
-
-        const period = req.query.period as string | undefined;
-        const startDate = req.query.startDate as string | undefined;
-        const endDate = req.query.endDate as string | undefined;
-
-        // const timePeriod = (req.query.timePeriod as TimePeriod) || undefined;
-        const { finalStartDate, finalEndDate, periodUsed } = getFilterDates(
-            period as Period | undefined,
-            startDate,
-            endDate,
-            TIMEZONE // Pass the constant timezone
-        );
+        const { storeId, finalStartDate, finalEndDate, periodUsed } = validated;
 
         // Base condition: Filter by the current user's store ID
         let whereClause: SQL | undefined = eq(inventoryTransactions.storeId, storeId);
@@ -202,8 +182,8 @@ export const getHistoricalStockReport = async (
 
 
         res.status(StatusCodes.OK).json({
-            periodStart: startDate || 'All Time',
-            periodEnd: endDate || 'All Time',
+            periodStart: finalStartDate ? finalStartDate.toISOString() : 'All Time',
+            periodEnd: finalEndDate ? finalEndDate.toISOString() : 'All Time',
             summary: formattedReport,
             period: periodUsed,
         });
