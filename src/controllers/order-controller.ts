@@ -61,10 +61,10 @@ export const getAllOrders = async (req: CustomRequest, res: Response) => {
  */
 export const getOrdersByPeriod = async (req: CustomRequest, res: Response) => {
     try {
-        const validated = validateStoreAndExtractDates(req, res);
+        const validated = await validateStoreAndExtractDates(req, res);
         if (!validated) return;
 
-        const { storeId, finalStartDate: startDate, finalEndDate: endDate, periodUsed } = validated;
+        const { storeIds, finalStartDate: startDate, finalEndDate: endDate, periodUsed, storeQueryType } = validated;
 
         let whereClause =
             startDate && endDate
@@ -75,8 +75,8 @@ export const getOrdersByPeriod = async (req: CustomRequest, res: Response) => {
                 : undefined;
 
         // If the user is an Admin, add their storeId to the where clause
-        if (storeId) {
-            const storeCondition = eq(orders.storeId, storeId);
+        if (storeIds) {
+            const storeCondition = inArray(orders.storeId, storeIds);
             whereClause = whereClause
                 ? and(whereClause, storeCondition)
                 : storeCondition;
@@ -161,6 +161,7 @@ export const getOrdersByPeriod = async (req: CustomRequest, res: Response) => {
                   }
                 : null,
             orders: ordersList,
+            storeQueryType
         };
 
         return res.status(StatusCodes.OK).json(response);

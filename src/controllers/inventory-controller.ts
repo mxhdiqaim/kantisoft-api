@@ -137,13 +137,13 @@ export const getHistoricalStockReport = async (
     res: Response,
 ) => {
     try {
-        const validated = validateStoreAndExtractDates(req, res);
+        const validated = await validateStoreAndExtractDates(req, res);
         if (!validated) return; // Error already handled
 
-        const { storeId, finalStartDate, finalEndDate, periodUsed } = validated;
+        const { storeIds, finalStartDate, finalEndDate, periodUsed, storeQueryType } = validated;
 
         // Base condition: Filter by the current user's store ID
-        let whereClause: SQL | undefined = eq(inventoryTransactions.storeId, storeId);
+        let whereClause: SQL | undefined = inArray(inventoryTransactions.storeId, storeIds);
 
         // 1. Construct the WHERE clause with a date filter
         if (finalStartDate && finalEndDate) {
@@ -186,6 +186,7 @@ export const getHistoricalStockReport = async (
             periodEnd: finalEndDate ? finalEndDate.toISOString() : 'All Time',
             summary: formattedReport,
             period: periodUsed,
+            storeQueryType
         });
 
     } catch (error) {

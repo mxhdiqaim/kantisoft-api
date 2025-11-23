@@ -19,9 +19,16 @@ export interface FilterDates {
     periodUsed: TimePeriod | "custom" | "all-time";
 }
 
+export type StoreQueryType =
+    | "Main Store"
+    | "Targeted Store"
+    | "All Stores (Aggregated)";
+
 export interface ValidatedStoreDatesType {
     storeIds: string[];
     finalStartDate?: Date;
     finalEndDate?: Date;
     periodUsed: TimePeriod | "custom" | "all-time";
+    storeQueryType: StoreQueryType;
+    // queriedStoreIds: string[];
 }

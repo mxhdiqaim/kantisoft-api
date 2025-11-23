@@ -25,7 +25,7 @@ export const getSalesSummary = async (req: CustomRequest, res: Response) => {
         const validated = await validateStoreAndExtractDates(req, res);
         if (!validated) return; // Error already handled
 
-        const { storeIds, finalStartDate, finalEndDate, periodUsed } = validated;
+        const { storeIds, finalStartDate, finalEndDate, periodUsed, storeQueryType } = validated;
 
         // Construct the base WHERE clause with the store ID
         let whereClause: SQL | undefined  = inArray(orders.storeId, storeIds);
@@ -51,6 +51,7 @@ export const getSalesSummary = async (req: CustomRequest, res: Response) => {
         const summary = result[0];
 
         const salesSummary = {
+            storeQueryType,
             period: periodUsed,
             startDate: finalStartDate ? finalStartDate.toISOString() : 'All Time',
             endDate: finalEndDate ? finalEndDate.toISOString() : 'All Time',
@@ -93,7 +94,7 @@ export const getTopSells = async (req: CustomRequest, res: Response) => {
         const validated = await validateStoreAndExtractDates(req, res);
         if (!validated) return; // Error already handled
 
-        const { storeIds, finalStartDate, finalEndDate, periodUsed } = validated;
+        const { storeIds, finalStartDate, finalEndDate, periodUsed, storeQueryType } = validated;
 
         // Construct the base WHERE clause with the store ID
         let whereClause: SQL | undefined  = inArray(orders.storeId, storeIds);
@@ -140,6 +141,7 @@ export const getTopSells = async (req: CustomRequest, res: Response) => {
         const topItems = await orderedQuery.limit(limit);
 
         const topSells = topItems.map((topItem) => ({
+            storeQueryType,
             timePeriod: periodUsed,
             startDate: finalStartDate ? finalStartDate.toISOString() : 'All Time',
             endDate: finalEndDate ? finalEndDate.toISOString() : 'All Time',
@@ -178,7 +180,7 @@ export const getInventorySummary = async (
         const validated = await validateStoreAndExtractDates(req, res);
         if (!validated) return; // Error already handled
 
-        const { storeIds } = validated;
+        const { storeIds, storeQueryType } = validated;
 
         // Construct the base WHERE clause for the menu item's store
         const menuStoreCondition = inArray(menuItems.storeId, storeIds);
@@ -221,6 +223,7 @@ export const getInventorySummary = async (
             totalOutOfStockItems: outOfStockItems.length,
             lowStockDetails: lowStockItems,
             outOfStockDetails: outOfStockItems,
+            storeQueryType
         });
     } catch (error) {
         // console.error("Error fetching inventory summary:", error);
@@ -248,7 +251,7 @@ export const getSalesTrend = async (req: CustomRequest, res: Response) => {
         const validated = await validateStoreAndExtractDates(req, res);
         if (!validated) return; // Error already handled
 
-        const { storeIds, finalStartDate, finalEndDate, periodUsed } = validated;
+        const { storeIds, finalStartDate, finalEndDate, periodUsed, storeQueryType } = validated;
 
 
         // Handle 'all-time' period by grouping by month
@@ -360,6 +363,7 @@ export const getSalesTrend = async (req: CustomRequest, res: Response) => {
         );
 
         const formattedTrend = allDates.map((date) => ({
+            storeQueryType,
             date,
             dailyRevenue: salesMap.get(date)?.dailyRevenue || 0,
             dailyOrders: salesMap.get(date)?.dailyOrders || 0,
@@ -392,7 +396,7 @@ export const getInventoryValuationAndHealth = async (
         const validated = await validateStoreAndExtractDates(req, res);
         if (!validated) return; // Error already handled
 
-        const { storeIds, finalStartDate, finalEndDate, periodUsed } = validated;
+        const { storeIds, finalStartDate, finalEndDate, periodUsed, storeQueryType } = validated;
 
         // Construct the base WHERE clause with the store ID
         let whereClause: SQL | undefined = inArray(inventory.storeId, storeIds);
@@ -460,6 +464,7 @@ export const getInventoryValuationAndHealth = async (
             inStockItemsCount,
             outOfStockItemsCount,
             stockedItemsPercentage: stockedItemsPercentage.toFixed(2),
+            storeQueryType
         });
     } catch (error) {
         // console.error("Error fetching inventory health and valuation:", error);

@@ -3,7 +3,7 @@ import { CustomRequest } from "../types/express";
 import { handleError2 } from "../service/error-handling";
 import { StatusCodes } from "http-status-codes";
 import { TIMEZONE } from "../constant";
-import { TimePeriod, ValidatedStoreDatesType } from "../types";
+import { StoreQueryType, TimePeriod, ValidatedStoreDatesType } from "../types";
 import { getFilterDates } from "./get-filter-dates";
 import { UserRoleEnum } from "../types/enums";
 import { getUserStoreScope } from "./get-store-scope";
@@ -41,27 +41,37 @@ export const validateStoreAndExtractDates = async (
     // Handle Manager Override for Single Store View
     // Managers can pass 'targetStoreId' to view one store from their scope.
     const targetStoreId = req.query.targetStoreId as string | undefined;
+    const storeScope = req.query.storeScope as string | undefined;
 
-    let finalStoreIds: string[] = authorizedStoreIds;
+    // let finalStoreIds: string[] = authorizedStoreIds;
+    let finalStoreIds: string[] = [];
 
-    if (userRole === UserRoleEnum.MANAGER && targetStoreId) {
-        // Validate that the requested store ID is actually in the manager's authorised scope
-        if (authorizedStoreIds.includes(targetStoreId)) {
-            finalStoreIds = [targetStoreId]; // Override to single store view
+    let storeQueryType: StoreQueryType;
+
+    if (userRole === UserRoleEnum.MANAGER) {
+        if (targetStoreId) {
+            // Manager requests a single store (Branch A, Branch B, or even the Main store)
+            if (authorizedStoreIds.includes(targetStoreId)) {
+                finalStoreIds = [targetStoreId];
+                storeQueryType = "Targeted Store";
+            } else {
+                // Invalid targetStoreId - fallback to the main store
+                finalStoreIds = [storeId];
+                storeQueryType = "Main Store";
+            }
+        } else if (storeScope === "all") {
+            // Manager explicitly requests ALL stores combined (Main + Branches)
+            finalStoreIds = authorizedStoreIds;
+            storeQueryType = "All Stores (Aggregated)";
         } else {
-            handleError2(
-                res,
-                "Requested store is outside the authorized scope for this manager.",
-                StatusCodes.FORBIDDEN,
-            );
-            return null;
+            // DEFAULT BEHAVIOR (No params passed) -> Show ONLY the Main Store
+            finalStoreIds = [storeId];
+            storeQueryType = "Main Store";
         }
-    } else if (userRole === UserRoleEnum.MANAGER && !targetStoreId) {
-        // If Manager and no target are specified, the default is ALL authorised stores (aggregation).
-        // finalStoreIds remains as authorizedStoreIds.
     } else {
-        // Admins/Users/Guests must only see their assigned single store.
+        // Admin/User/Guest logic remains the same: always their single assigned store
         finalStoreIds = [storeId];
+        storeQueryType = "Main Store";
     }
 
     const timePeriod = req.query.timePeriod as string | undefined;
@@ -85,5 +95,6 @@ export const validateStoreAndExtractDates = async (
         finalStartDate,
         finalEndDate,
         periodUsed,
+        storeQueryType,
     };
 };
