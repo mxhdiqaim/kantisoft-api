@@ -1,6 +1,6 @@
 import { Response } from "express";
 import db from "../db";
-import { and, count, desc, eq, gte, lt, max, min, sql, sum, lte, SQL } from "drizzle-orm";
+import { and, count, desc, eq, gte, lt, max, min, sql, sum, lte, SQL, inArray } from "drizzle-orm";
 import { orderItems, orders } from "../schema/orders-schema";
 import { handleError2 } from "../service/error-handling";
 import { StatusCodeEnum } from "../types/enums";
@@ -22,13 +22,13 @@ import { TIMEZONE } from "../constant";
  */
 export const getSalesSummary = async (req: CustomRequest, res: Response) => {
     try {
-        const validated = validateStoreAndExtractDates(req, res);
+        const validated = await validateStoreAndExtractDates(req, res);
         if (!validated) return; // Error already handled
 
-        const { storeId, finalStartDate, finalEndDate, periodUsed } = validated;
+        const { storeIds, finalStartDate, finalEndDate, periodUsed } = validated;
 
         // Construct the base WHERE clause with the store ID
-        let whereClause: SQL | undefined  = eq(orders.storeId, storeId);
+        let whereClause: SQL | undefined  = inArray(orders.storeId, storeIds);
 
         // Apply date range filter first if applicable
         if (finalStartDate && finalEndDate) {
@@ -90,13 +90,13 @@ export const getTopSells = async (req: CustomRequest, res: Response) => {
         const limit = parseInt(req.query.limit as string) || 5;
         const orderBy = (req.query.orderBy as OrderBy) || "quantity"; // 'quantity' or 'revenue'
 
-        const validated = validateStoreAndExtractDates(req, res);
+        const validated = await validateStoreAndExtractDates(req, res);
         if (!validated) return; // Error already handled
 
-        const { storeId, finalStartDate, finalEndDate, periodUsed } = validated;
+        const { storeIds, finalStartDate, finalEndDate, periodUsed } = validated;
 
         // Construct the base WHERE clause with the store ID
-        let whereClause: SQL | undefined  = eq(orders.storeId, storeId);
+        let whereClause: SQL | undefined  = inArray(orders.storeId, storeIds);
 
         if (finalStartDate && finalEndDate) {
             whereClause = and(
@@ -175,30 +175,28 @@ export const getInventorySummary = async (
     res: Response,
 ) => {
     try {
-        const currentUser = req.user?.data;
-        const storeId = currentUser?.storeId;
+        const validated = await validateStoreAndExtractDates(req, res);
+        if (!validated) return; // Error already handled
 
-        if (!storeId) {
-            return handleError2(
-                res,
-                "User must be belong to a store to access this feature.",
-                StatusCodes.BAD_REQUEST,
-            );
-        }
+        const { storeIds } = validated;
+
+        // Construct the base WHERE clause for the menu item's store
+        const menuStoreCondition = inArray(menuItems.storeId, storeIds);
+        // Note: inventory table might also have storeId, but filtering on menuItems ensures we count items correctly.
 
         const outOfStockItems = await db
             .select({
                 id: menuItems.id,
                 name: menuItems.name,
                 isAvailable: menuItems.isAvailable,
-                quantity: inventory.quantity, // Include quantity for context
+                quantity: inventory.quantity,
             })
             .from(menuItems)
-            .innerJoin(inventory, eq(inventory.menuItemId, menuItems.id)) // Join inventory
+            .innerJoin(inventory, eq(inventory.menuItemId, menuItems.id))
             .where(
                 and(
-                    eq(menuItems.storeId, storeId),
-                    eq(inventory.status, "outOfStock"), // Filter by new status enum
+                    menuStoreCondition,
+                    eq(inventory.status, "outOfStock"),
                 ),
             );
 
@@ -207,14 +205,14 @@ export const getInventorySummary = async (
                 id: menuItems.id,
                 name: menuItems.name,
                 isAvailable: menuItems.isAvailable,
-                quantity: inventory.quantity, // Include quantity for context
+                quantity: inventory.quantity,
             })
             .from(menuItems)
-            .innerJoin(inventory, eq(inventory.menuItemId, menuItems.id)) // Join inventory
+            .innerJoin(inventory, eq(inventory.menuItemId, menuItems.id))
             .where(
                 and(
-                    eq(menuItems.storeId, storeId),
-                    eq(inventory.status, "lowStock"), // Filter by new status enum
+                    menuStoreCondition,
+                    eq(inventory.status, "lowStock"),
                 ),
             );
 
@@ -247,10 +245,10 @@ export const getInventorySummary = async (
 export const getSalesTrend = async (req: CustomRequest, res: Response) => {
     try {
         // const timezone = "Africa/Lagos";
-        const validated = validateStoreAndExtractDates(req, res);
+        const validated = await validateStoreAndExtractDates(req, res);
         if (!validated) return; // Error already handled
 
-        const { storeId, finalStartDate, finalEndDate, periodUsed } = validated;
+        const { storeIds, finalStartDate, finalEndDate, periodUsed } = validated;
 
 
         // Handle 'all-time' period by grouping by month
@@ -262,7 +260,7 @@ export const getSalesTrend = async (req: CustomRequest, res: Response) => {
                     monthlyOrders: count(orders.id),
                 })
                 .from(orders)
-                .where(eq(orders.storeId, storeId))
+                .where(inArray(orders.storeId, storeIds))
                 .groupBy(sql`TO_CHAR(${orders.orderDate}, 'YYYY-MM')`)
                 .orderBy(sql`TO_CHAR(${orders.orderDate}, 'YYYY-MM')`);
 
@@ -272,7 +270,7 @@ export const getSalesTrend = async (req: CustomRequest, res: Response) => {
                     maxDate: max(orders.orderDate),
                 })
                 .from(orders)
-                .where(eq(orders.storeId, storeId));
+                .where(inArray(orders.storeId, storeIds));
 
             const firstOrderDate = dateRange[0].minDate;
             const lastOrderDate = dateRange[0].maxDate;
@@ -321,7 +319,7 @@ export const getSalesTrend = async (req: CustomRequest, res: Response) => {
 
         // Construct WHERE clause with date range and storeId
         const whereClause = and(
-            eq(orders.storeId, storeId),
+            inArray(orders.storeId, storeIds),
             gte(orders.orderDate, finalStartDate),
             lt(orders.orderDate, finalEndDate),
         );
@@ -391,13 +389,13 @@ export const getInventoryValuationAndHealth = async (
     res: Response,
 ) => {
     try {
-        const validated = validateStoreAndExtractDates(req, res);
+        const validated = await validateStoreAndExtractDates(req, res);
         if (!validated) return; // Error already handled
 
-        const { storeId, finalStartDate, finalEndDate, periodUsed } = validated;
+        const { storeIds, finalStartDate, finalEndDate, periodUsed } = validated;
 
         // Construct the base WHERE clause with the store ID
-        let whereClause: SQL | undefined = eq(inventory.storeId, storeId);
+        let whereClause: SQL | undefined = inArray(inventory.storeId, storeIds);
 
         // ADD DATE FILTERING (e.g., filtering inventory records by last modified date)
         if (finalStartDate && finalEndDate) {

@@ -18,3 +18,10 @@ export interface FilterDates {
     // Indicates which logic block was used to determine the dates
     periodUsed: TimePeriod | "custom" | "all-time";
 }
+
+export interface ValidatedStoreDatesType {
+    storeIds: string[];
+    finalStartDate?: Date;
+    finalEndDate?: Date;
+    periodUsed: TimePeriod | "custom" | "all-time";
+}
