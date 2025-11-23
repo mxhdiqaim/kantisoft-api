@@ -14,7 +14,7 @@ import { StatusCodes } from "http-status-codes";
 
 /**
  * @description Get core sales summary metrics (Revenue, Order Count, Avg Order Value)
- * @route GET /api/dashboard/sales-summary
+ * @route GET /api/v1/dashboard/sales-summary
  * @access Private (Admin/Manager)
  * @queryParam period string ('today', 'week', 'month', 'all-time')
  * @queryParam timezone string (e.g., 'Africa/Lagos') - defaults if not provided
@@ -91,7 +91,7 @@ export const getSalesSummary = async (req: CustomRequest, res: Response) => {
 
 /**
  * @description Get top N selling items by quantity or revenue
- * @route GET /api/dashboard/top-sells
+ * @route GET /api/v1/dashboard/top-sells
  * @access Private (Admin/Manager)
  * @queryParam limit number (default 5)
  * @queryParam orderBy string ('quantity', 'revenue') (default 'quantity')
@@ -185,7 +185,7 @@ export const getTopSells = async (req: CustomRequest, res: Response) => {
 
 /**
  * @description Get inventory summary metrics (low stock, out of stock counts)
- * @route GET /api/dashboard/inventory-summary
+ * @route GET /api/v1/dashboard/inventory-summary
  * @access Private (Admin/Manager) - Only relevant for supermarket/pharmacy
  */
 export const getInventorySummary = async (
@@ -256,7 +256,7 @@ export const getInventorySummary = async (
 
 /**
  * @description Get sales trend by day for a given period
- * @route GET /api/dashboard/sales-trend
+ * @route GET /api/v1/dashboard/sales-trend
  * @access Private (Admin/Manager)
  * @queryParam period string ('week', 'month')
  * @queryParam timezone string (e.g., 'Africa/Lagos')
@@ -395,6 +395,89 @@ export const getSalesTrend = async (req: CustomRequest, res: Response) => {
             res,
             `Failed to retrieve sales trend for ${period}.`,
             StatusCodeEnum.INTERNAL_SERVER_ERROR,
+        );
+    }
+};
+
+/**
+ * @description Get inventory valuation and overall health metrics (based on selling price)
+ * @route GET /api/v1/dashboard/inventory-health-valuation
+ * @access Private (Admin/Manager)
+ */
+export const getInventoryValuationAndHealth = async (
+    req: CustomRequest,
+    res: Response,
+) => {
+    try {
+        const currentUser = req.user?.data;
+        const storeId = currentUser?.storeId;
+        // const storeId = req.userStoreId!; // Get storeId from middleware
+
+        if (!storeId) {
+            return handleError2(
+                res,
+                "User must be belong to a store to access this feature.",
+                StatusCodes.BAD_REQUEST,
+            );
+        }
+
+        // Fetch all inventory records for the store and join with menuItems to get the price
+        const inventoryData = await db
+            .select({
+                menuItemId: menuItems.id,
+                quantity: inventory.quantity,
+                price: menuItems.price,
+                status: inventory.status,
+            })
+            .from(inventory)
+            .innerJoin(menuItems, eq(inventory.menuItemId, menuItems.id))
+            .where(eq(inventory.storeId, storeId));
+
+        let totalInventoryValue = 0;
+        let totalTrackedItems = 0;
+        let inStockItemsCount = 0;
+        let outOfStockItemsCount = 0;
+
+        for (const item of inventoryData) {
+            totalTrackedItems++;
+            const quantity = parseFloat(String(item.quantity));
+            const price = parseFloat(String(item.price));
+
+            // Calculate valuation (based on selling price)
+            totalInventoryValue += quantity * price;
+
+            // Count health status
+            if (quantity > 0 && item.status !== 'discontinued') {
+                inStockItemsCount++;
+            }
+            if (quantity <= 0) {
+                outOfStockItemsCount++;
+            }
+
+            // Note: 'lowStock' count can be derived from the existing getInventorySummary if needed
+        }
+
+        const stockedItemsPercentage = totalTrackedItems > 0
+            ? (inStockItemsCount / totalTrackedItems) * 100
+            : 0;
+
+        const formattedTotalValue = totalInventoryValue.toFixed(2);
+
+        res.status(StatusCodes.OK).json({
+            totalInventoryValue: formattedTotalValue,
+            totalTrackedItems,
+            inStockItemsCount,
+            outOfStockItemsCount,
+            stockedItemsPercentage: stockedItemsPercentage.toFixed(2),
+        });
+
+    } catch (error) {
+        // console.error("Error fetching inventory health and valuation:", error);
+        return handleError2(
+            res,
+            "Failed to retrieve inventory health summary.",
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
         );
     }
 };

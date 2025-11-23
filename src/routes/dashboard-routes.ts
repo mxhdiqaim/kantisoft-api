@@ -25,5 +25,10 @@ router.get(
     isAuthorized([UserRoleEnum.MANAGER, UserRoleEnum.ADMIN]),
     controller.getSalesTrend,
 );
+router.get(
+    "/inventory-health-valuation",
+    isAuthorized([UserRoleEnum.MANAGER, UserRoleEnum.ADMIN]),
+    controller.getInventoryValuationAndHealth,
+);
 
 export = router;
