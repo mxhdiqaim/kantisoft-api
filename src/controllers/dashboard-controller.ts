@@ -1,17 +1,16 @@
 import { Response } from "express";
 import db from "../db";
 import { and, count, desc, eq, gte, lt, max, min, sql, sum, lte, SQL } from "drizzle-orm";
-import { getPeriodDates } from "../utils/get-period-dates";
 import { orderItems, orders } from "../schema/orders-schema";
-import { handleError, handleError2 } from "../service/error-handling";
+import { handleError2 } from "../service/error-handling";
 import { StatusCodeEnum } from "../types/enums";
-import { OrderBy, Period } from "../types";
+import { OrderBy } from "../types";
 import { menuItems } from "../schema/menu-items-schema";
 import moment from "moment-timezone";
 import { CustomRequest } from "../types/express";
 import { inventory } from "../schema/inventory-schema";
 import { StatusCodes } from "http-status-codes";
-import { validateStoreAndExtractDates } from "./validate-store-dates";
+import { validateStoreAndExtractDates } from "../utils/validate-store-dates";
 
 /**
  * @description Get core sales summary metrics (Revenue, Order Count, Avg Order Value)
@@ -240,17 +239,25 @@ export const getInventorySummary = async (
  * @description Get sales trend by day for a given period
  * @route GET /api/v1/dashboard/sales-trend
  * @access Private (Admin/Manager)
- * @queryParam period string ('week', 'month')
- * @queryParam timezone string (e.g., 'Africa/Lagos')
+ * @queryParam timePeriod string ('today', 'week', 'month', 'all-time')
+ * @queryParam startDate string (DD/MM/YYYY format for custom range)
+ * @queryParam endDate string (DD/MM/YYYY format for custom range)
+ * @queryParam timezone string (e.g. 'Africa/Lagos')
  */
 export const getSalesTrend = async (req: CustomRequest, res: Response) => {
-    const period = (req.query.period as Period) || "week"; // 'week' or 'month'
-    const timezone = "Africa/Lagos";
-    const userStoreId = req.userStoreId!; // Get storeId from middleware
-
     try {
+        const timezone = "Africa/Lagos";
+        // const period = (req.query.period as Period) || "week"; // 'week' or 'month'
+        // const userStoreId = req.userStoreId!; // Get storeId from middleware
+
+        const validated = validateStoreAndExtractDates(req, res);
+        if (!validated) return; // Error already handled
+
+        const { storeId, finalStartDate, finalEndDate, periodUsed } = validated;
+
+
         // Handle 'all-time' period by grouping by month
-        if (period === "all-time") {
+        if (periodUsed === "all-time") {
             const salesTrendByMonth = await db
                 .select({
                     date: sql<string>`TO_CHAR(${orders.orderDate}, 'YYYY-MM')`,
@@ -258,9 +265,7 @@ export const getSalesTrend = async (req: CustomRequest, res: Response) => {
                     monthlyOrders: count(orders.id),
                 })
                 .from(orders)
-                .where(
-                    userStoreId ? eq(orders.storeId, userStoreId) : undefined,
-                ) // Scope the query
+                .where(eq(orders.storeId, storeId))
                 .groupBy(sql`TO_CHAR(${orders.orderDate}, 'YYYY-MM')`)
                 .orderBy(sql`TO_CHAR(${orders.orderDate}, 'YYYY-MM')`);
 
@@ -270,15 +275,13 @@ export const getSalesTrend = async (req: CustomRequest, res: Response) => {
                     maxDate: max(orders.orderDate),
                 })
                 .from(orders)
-                .where(
-                    userStoreId ? eq(orders.storeId, userStoreId) : undefined,
-                ); // Scope the query
+                .where(eq(orders.storeId, storeId));
 
             const firstOrderDate = dateRange[0].minDate;
             const lastOrderDate = dateRange[0].maxDate;
 
             if (!firstOrderDate || !lastOrderDate) {
-                return res.status(200).json([]); // No data to show
+                return res.status(StatusCodes.OK).json([]); // No data to show
             }
 
             const allMonths = [];
@@ -308,27 +311,26 @@ export const getSalesTrend = async (req: CustomRequest, res: Response) => {
                 dailyOrders: salesMap.get(date)?.orders || 0,
             }));
 
-            return res.status(StatusCodeEnum.OK).json(formattedTrend);
+            return res.status(StatusCodes.OK).json(formattedTrend);
         }
 
-        const { startDate, endDate } = getPeriodDates(period, timezone);
-
-        if (!startDate || !endDate) {
-            return handleError(
+        if (!finalStartDate || !finalEndDate) {
+            return handleError2(
                 res,
-                `Invalid period specified for sales trend: ${period}`,
-                StatusCodeEnum.BAD_REQUEST,
+                `Invalid period specified for sales trend.`,
+                StatusCodes.BAD_REQUEST,
             );
         }
 
-        // Base where clause for date range
-        const baseWhere = and(
-            gte(orders.orderDate, startDate),
-            lt(orders.orderDate, endDate),
+        // Construct WHERE clause with date range and storeId
+        const whereClause = and(
+            eq(orders.storeId, storeId),
+            gte(orders.orderDate, finalStartDate),
+            lt(orders.orderDate, finalEndDate),
         );
 
         // CRITICAL FIX: Combine base where with storeId filter
-        const whereClause = and(baseWhere, eq(orders.storeId, userStoreId));
+        // const whereClause = and(baseWhere, eq(orders.storeId, userStoreId));
 
         // Group by day using PostgreSQL's TO_CHAR for formatting date
         const salesTrend = await db
@@ -344,8 +346,8 @@ export const getSalesTrend = async (req: CustomRequest, res: Response) => {
 
         // Fill in missing dates with zero sales for a complete trend line
         const allDates = [];
-        const current = moment(startDate).tz(timezone).startOf("day");
-        const end = moment(endDate).tz(timezone).startOf("day");
+        const current = moment(finalStartDate).tz(timezone).startOf("day");
+        const end = moment(finalEndDate).tz(timezone).startOf("day");
 
         while (current.isSameOrBefore(end, "day")) {
             allDates.push(current.format("YYYY-MM-DD"));
@@ -368,15 +370,16 @@ export const getSalesTrend = async (req: CustomRequest, res: Response) => {
             dailyOrders: salesMap.get(date)?.dailyOrders || 0,
         }));
 
-        res.status(StatusCodeEnum.OK).json(formattedTrend);
+        res.status(StatusCodes.OK).json(formattedTrend);
     } catch (error) {
-        console.error(
-            `Error fetching sales trend for period ${period}: ${error}`,
-        );
-        return handleError(
+        // console.error(
+        //     `Error fetching sales trend for period ${period}: ${error}`,
+        // );
+        return handleError2(
             res,
-            `Failed to retrieve sales trend for ${period}.`,
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            `Failed to retrieve sales trend.`,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined
         );
     }
 };
