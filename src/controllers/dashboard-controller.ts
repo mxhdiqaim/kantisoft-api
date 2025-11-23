@@ -11,6 +11,7 @@ import { CustomRequest } from "../types/express";
 import { inventory } from "../schema/inventory-schema";
 import { StatusCodes } from "http-status-codes";
 import { validateStoreAndExtractDates } from "../utils/validate-store-dates";
+import { TIMEZONE } from "../constant";
 
 /**
  * @description Get core sales summary metrics (Revenue, Order Count, Avg Order Value)
@@ -176,7 +177,6 @@ export const getInventorySummary = async (
     try {
         const currentUser = req.user?.data;
         const storeId = currentUser?.storeId;
-        // const userStoreId = req.userStoreId!; // Get storeId from middleware
 
         if (!storeId) {
             return handleError2(
@@ -246,10 +246,7 @@ export const getInventorySummary = async (
  */
 export const getSalesTrend = async (req: CustomRequest, res: Response) => {
     try {
-        const timezone = "Africa/Lagos";
-        // const period = (req.query.period as Period) || "week"; // 'week' or 'month'
-        // const userStoreId = req.userStoreId!; // Get storeId from middleware
-
+        // const timezone = "Africa/Lagos";
         const validated = validateStoreAndExtractDates(req, res);
         if (!validated) return; // Error already handled
 
@@ -286,9 +283,9 @@ export const getSalesTrend = async (req: CustomRequest, res: Response) => {
 
             const allMonths = [];
             const current = moment(firstOrderDate)
-                .tz(timezone)
+                .tz(TIMEZONE)
                 .startOf("month");
-            const end = moment(lastOrderDate).tz(timezone).startOf("month");
+            const end = moment(lastOrderDate).tz(TIMEZONE).startOf("month");
 
             while (current.isSameOrBefore(end, "month")) {
                 allMonths.push(current.format("YYYY-MM"));
@@ -346,8 +343,8 @@ export const getSalesTrend = async (req: CustomRequest, res: Response) => {
 
         // Fill in missing dates with zero sales for a complete trend line
         const allDates = [];
-        const current = moment(finalStartDate).tz(timezone).startOf("day");
-        const end = moment(finalEndDate).tz(timezone).startOf("day");
+        const current = moment(finalStartDate).tz(TIMEZONE).startOf("day");
+        const end = moment(finalEndDate).tz(TIMEZONE).startOf("day");
 
         while (current.isSameOrBefore(end, "day")) {
             allDates.push(current.format("YYYY-MM-DD"));

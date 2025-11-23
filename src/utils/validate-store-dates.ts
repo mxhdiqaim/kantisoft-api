@@ -12,6 +12,7 @@ export const validateStoreAndExtractDates = (
 ) => {
     const currentUser = req.user?.data;
     const storeId = currentUser?.storeId;
+    // const timezone = currentUser?.timezone || TIMEZONE;
 
     if (!storeId) {
         handleError2(

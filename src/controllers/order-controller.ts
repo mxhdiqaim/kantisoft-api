@@ -1,4 +1,3 @@
- 
 import { and, eq, gte, inArray, sum, count } from "drizzle-orm";
 import { sql, desc } from "drizzle-orm";
 import { lte } from "drizzle-orm/sql/expressions/conditions";
@@ -7,19 +6,18 @@ import db from "../db";
 import { menuItems } from "../schema/menu-items-schema";
 import { orderItems, orders } from "../schema/orders-schema";
 import { users } from "../schema/users-schema";
-import { Period } from "../types";
 import {
     OrderPaymentMethodEnum,
     OrderStatusEnum,
     StatusCodeEnum,
 } from "../types/enums";
 import { handleError, handleError2 } from "../service/error-handling";
-import { getPeriodDates } from "../utils/get-period-dates";
 import { generateOrderReference } from "../utils";
 import { logActivity } from "../service/activity-logger";
 import { CustomRequest } from "../types/express";
 import { decrementStockForOrder } from "./inventory-controller";
 import { StatusCodes } from "http-status-codes";
+import { validateStoreAndExtractDates } from "../utils/validate-store-dates";
 
 export const getAllOrders = async (req: CustomRequest, res: Response) => {
     try {
@@ -53,16 +51,20 @@ export const getAllOrders = async (req: CustomRequest, res: Response) => {
 };
 
 /**
- * @desc    Get orders by a dynamic period (day, week, month). Defaults to 'day'.
- * @route   GET /api/orders/by-period?period=week
+ * @desc    Get orders by a dynamic period (today, week, month). Defaults to 'today'.
+ * @route   GET /api/v1/orders/by-period?period=week
+ *
+ * @queryParam timePeriod string ('today', 'week', 'month', 'all-time')
+ * @queryParam startDate string (DD/MM/YYYY format for custom range)
+ * @queryParam endDate string (DD/MM/YYYY format for custom range)
+ * @queryParam timezone string (e.g. 'Africa/Lagos')
  */
 export const getOrdersByPeriod = async (req: CustomRequest, res: Response) => {
     try {
-        const period = (req.query.period as Period) || "today";
-        const timezone = "Africa/Lagos";
-        const userStoreId = req.userStoreId; // Get storeId from middleware
+        const validated = validateStoreAndExtractDates(req, res);
+        if (!validated) return;
 
-        const { startDate, endDate } = getPeriodDates(period, timezone);
+        const { storeId, finalStartDate: startDate, finalEndDate: endDate, periodUsed } = validated;
 
         let whereClause =
             startDate && endDate
@@ -73,8 +75,8 @@ export const getOrdersByPeriod = async (req: CustomRequest, res: Response) => {
                 : undefined;
 
         // If the user is an Admin, add their storeId to the where clause
-        if (userStoreId) {
-            const storeCondition = eq(orders.storeId, userStoreId);
+        if (storeId) {
+            const storeCondition = eq(orders.storeId, storeId);
             whereClause = whereClause
                 ? and(whereClause, storeCondition)
                 : storeCondition;
@@ -139,7 +141,9 @@ export const getOrdersByPeriod = async (req: CustomRequest, res: Response) => {
         const topSeller = topSellerResult[0];
 
         const response = {
-            period,
+            timePeriod: periodUsed,
+            startDate: startDate ? startDate.toISOString() : 'All Time',
+            endDate: endDate ? endDate.toISOString() : 'All Time',
             totalRevenue: parseFloat(summary.totalRevenue || "0").toFixed(2),
             totalOrders: summary.totalOrders || 0,
             mostOrderedItem: mostOrderedItem
@@ -159,13 +163,14 @@ export const getOrdersByPeriod = async (req: CustomRequest, res: Response) => {
             orders: ordersList,
         };
 
-        return res.status(200).json(response);
+        return res.status(StatusCodes.OK).json(response);
     } catch (error) {
         console.error(error);
-        return handleError(
+        return handleError2(
             res,
             "Problem loading orders for the specified period, please try again.",
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
         );
     }
 };
