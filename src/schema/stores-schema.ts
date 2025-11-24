@@ -22,5 +22,5 @@ export const stores = pgTable("stores", {
         .$onUpdateFn(() => new Date()),
 });
 
-export type Store = typeof stores.$inferSelect;
+export type StoreType = typeof stores.$inferSelect;
 export type NewStore = typeof stores.$inferInsert;

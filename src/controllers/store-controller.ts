@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import db from "../db";
-import { stores } from "../schema/stores-schema";
+import { stores, StoreType } from "../schema/stores-schema";
 import { and, eq, or } from "drizzle-orm";
 import { handleError, handleError2 } from "../service/error-handling";
 import { StatusCodeEnum } from "../types/enums";
@@ -19,13 +19,27 @@ export const getAllStores = async (req: Request, res: Response) => {
                 StatusCodes.FORBIDDEN,
             );
         }
-        const allStores = await db.query.stores.findMany({
+        const mainStoreData = await db.query.stores.findFirst({
             // Optionally, you could filter for only top-level stores (not branches)
             where: eq(stores.id, String(storeId)),
             with: {
                 branches: true, // Include all child stores (branches)
             },
         });
+
+        if (!mainStoreData) {
+            return res.status(StatusCodes.OK).json([]);
+        }
+
+        const { branches = [], ...mainStore } = mainStoreData;
+
+        const formattedStores = [
+            { ...mainStore, branchType: "main" },
+            ...branches.map((branch: StoreType) => ({
+                ...branch,
+                branchType: "branch",
+            })),
+        ];
 
         // // Log activity for viewing a store
         // await logActivity({
@@ -34,9 +48,9 @@ export const getAllStores = async (req: Request, res: Response) => {
         //     action: "STORES_VIEWED",
         //     details: `All stores viewed by ${currentUser.firstName} ${currentUser.lastName}.`,
         // });
-        res.status(StatusCodes.OK).json(allStores);
+        res.status(StatusCodes.OK).json(formattedStores);
     } catch (error) {
-        console.log("error", error);
+        // console.log("error", error);
         handleError2(
             res,
             "Failed to fetch stores.",
@@ -115,20 +129,22 @@ export const getStoreById = async (req: Request, res: Response) => {
 
 export const createStore = async (req: Request, res: Response) => {
     try {
-        const { name, location, storeType } = req.body;
         const currentUser = req.user?.data;
+        const storeId = currentUser?.storeId;
 
         // A manager can only create a branch for their own store.
-        if (!currentUser?.storeId) {
-            return handleError(
+        if (!storeId) {
+            return handleError2(
                 res,
                 "You must belong to a store to create a branch.",
-                StatusCodeEnum.FORBIDDEN,
+                StatusCodes.FORBIDDEN,
             );
         }
 
+        const { name, location, storeType } = req.body;
+
         // Assign the new store's parentId to be the current user's storeId
-        const storeParentId = currentUser.storeId;
+        const storeParentId = storeId;
 
         const [newStore] = await db
             .insert(stores)
@@ -145,13 +161,14 @@ export const createStore = async (req: Request, res: Response) => {
             details: `Store "${newStore.name}" created by ${currentUser.firstName} ${currentUser.lastName}.`,
         });
 
-        res.status(StatusCodeEnum.CREATED).json(newStore);
+        res.status(StatusCodes.CREATED).json(newStore);
     } catch (error) {
-        console.log("error", error);
-        handleError(
+        // console.log("error", error);
+        handleError2(
             res,
             "Failed to create store.",
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
         );
     }
 };

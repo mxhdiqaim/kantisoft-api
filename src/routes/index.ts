@@ -9,7 +9,7 @@ import activities from "./activity-routes";
 import inventory from "./inventory-routes";
 import auth from "./auth-routes";
 import { protectedRoute } from "../config/jwt-config";
-import { checkStoreAccess } from "../middlewares/check-store-access";
+import { checkUserHasStore } from "../middlewares/check-user-has-store";
 import { isAuthorized } from "../middlewares/is-authorised-middleware";
 import { UserRoleEnum } from "../types/enums";
 import { StatusCodes } from "http-status-codes";
@@ -47,8 +47,8 @@ router.use(
 );
 
 // These routes need to be protected and scoped to the user's store
-router.use("/menu-items", checkStoreAccess, menuItems);
-router.use("/orders", checkStoreAccess, orders);
-router.use("/dashboard", checkStoreAccess, dashboard);
+router.use("/menu-items", checkUserHasStore, menuItems);
+router.use("/orders", checkUserHasStore, orders);
+router.use("/dashboard", checkUserHasStore, dashboard);
 
 export default router;
