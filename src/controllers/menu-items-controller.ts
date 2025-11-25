@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import {and, desc, eq, inArray, ne, or} from "drizzle-orm";
-import {Request, Response} from "express";
+import {and, desc, eq, inArray, ne} from "drizzle-orm";
+import {Response} from "express";
 import db from "../db";
 import {menuItems} from "../schema/menu-items-schema";
 import {generateUniqueItemCode} from "../utils/generate-unique-item-code";
@@ -8,7 +8,8 @@ import {handleError2} from "../service/error-handling";
 import {CustomRequest} from "../types/express";
 import {logActivity} from "../service/activity-logger";
 import {StatusCodes} from "http-status-codes";
-import {stores} from "../schema/stores-schema";
+import {UserRoleEnum} from "../types/enums";
+import {getStoreAndBranchIds} from "../service/store-service";
 
 // Get all menu items from the main store and its branches
 export const getAllMenuItemsFromStoreAndBranches = async (
@@ -27,33 +28,15 @@ export const getAllMenuItemsFromStoreAndBranches = async (
             );
         }
 
-        // Find the user's store to determine if it's a main store or a branch
-        const currentStore = await db.query.stores.findFirst({
-            where: eq(stores.id, storeId),
-            columns: { id: true, storeParentId: true },
-        });
+        const storeIds = await getStoreAndBranchIds(storeId);
 
-        if (!currentStore) {
+        if (!storeIds) {
             return handleError2(
                 res,
                 "Associated store not found.",
                 StatusCodes.NOT_FOUND,
             );
         }
-
-        // Determine the main store ID
-        const mainStoreId = currentStore.storeParentId || currentStore.id;
-
-        // Get the IDs of the main store and all its branches
-        const relatedStores = await db.query.stores.findMany({
-            where: or(
-                eq(stores.id, mainStoreId),
-                eq(stores.storeParentId, mainStoreId),
-            ),
-            columns: { id: true },
-        });
-
-        const storeIds = relatedStores.map((store) => store.id);
 
         if (storeIds.length === 0) {
             return res.status(StatusCodes.OK).json([]);
@@ -83,8 +66,7 @@ export const getAllMenuItems = async (req: CustomRequest, res: Response) => {
     try {
         const currentUser = req.user?.data;
         const storeId = currentUser?.storeId;
-
-        // const userStoreId = req.userStoreId; // Get storeId from middleware
+        const userRole = currentUser?.role;
 
         if (!storeId) {
             return handleError2(
@@ -94,15 +76,30 @@ export const getAllMenuItems = async (req: CustomRequest, res: Response) => {
             );
         }
 
+        let whereClause;
+
+        if (userRole === UserRoleEnum.MANAGER) {
+            const storeIds = await getStoreAndBranchIds(storeId);
+            if (!storeIds) {
+                return handleError2(
+                    res,
+                    "Associated store not found.",
+                    StatusCodes.NOT_FOUND,
+                );
+            }
+            whereClause = inArray(menuItems.storeId, storeIds);
+        } else {
+            whereClause = eq(menuItems.storeId, storeId);
+        }
+
         const allMenuItems = await db.query.menuItems.findMany({
-            where: eq(menuItems.storeId, storeId), // Always filter by storeId
+            where: whereClause,
             orderBy: [desc(menuItems.createdAt)],
             with: { store: { columns: { name: true } } },
         });
 
         res.status(StatusCodes.OK).json(allMenuItems);
     } catch (error) {
-        // console.error(error);
         handleError2(
             res,
             "Problem loading menu items, please try again",
@@ -117,9 +114,8 @@ export const getMenuItemById = async (req: CustomRequest, res: Response) => {
     try {
         const currentUser = req.user?.data;
         const storeId = currentUser?.storeId;
-
+        const userRole = currentUser?.role;
         const { id } = req.params;
-        // const userStoreId = req.userStoreId;
 
         if (!storeId) {
             return handleError2(
@@ -129,12 +125,27 @@ export const getMenuItemById = async (req: CustomRequest, res: Response) => {
             );
         }
 
-        // Managers and Admins can view any item within their store.
-        // Users and Guests can also view items within their store.
-        const whereClause = and(
-            eq(menuItems.id, id),
-            eq(menuItems.storeId, storeId), // CRITICAL: Always filter by user's storeId
-        );
+        let whereClause;
+
+        if (userRole === UserRoleEnum.MANAGER) {
+            const storeIds = await getStoreAndBranchIds(storeId);
+            if (!storeIds) {
+                return handleError2(
+                    res,
+                    "Associated store not found.",
+                    StatusCodes.NOT_FOUND,
+                );
+            }
+            whereClause = and(
+                eq(menuItems.id, id),
+                inArray(menuItems.storeId, storeIds),
+            );
+        } else {
+            whereClause = and(
+                eq(menuItems.id, id),
+                eq(menuItems.storeId, storeId),
+            );
+        }
 
         const menuItem = await db.query.menuItems.findFirst({
             where: whereClause,
@@ -143,14 +154,13 @@ export const getMenuItemById = async (req: CustomRequest, res: Response) => {
         if (!menuItem) {
             return handleError2(
                 res,
-                "Menu item not found",
+                "Menu item not found or you do not have permission to view it.",
                 StatusCodes.NOT_FOUND,
             );
         }
 
         res.status(StatusCodes.OK).json(menuItem);
     } catch (error) {
-        // console.error(error);
         return handleError2(
             res,
             "Problem loading menu item, please try again",
@@ -161,10 +171,11 @@ export const getMenuItemById = async (req: CustomRequest, res: Response) => {
 };
 
 // Create a new menu item
-export const createMenuItem = async (req: Request, res: Response) => {
+export const createMenuItem = async (req: CustomRequest, res: Response) => {
     try {
         const currentUser = req.user?.data;
         const storeId = currentUser?.storeId;
+        const userRole = currentUser?.role;
 
         if (!storeId) {
             return handleError2(
@@ -179,9 +190,25 @@ export const createMenuItem = async (req: Request, res: Response) => {
             price,
             isAvailable,
             itemCode: providedItemCode,
+            storeId: targetStoreId, // For managers to specify a store
         } = req.body;
 
-        // Validate required fields early
+        let finalStoreId = storeId;
+
+        if (userRole === UserRoleEnum.MANAGER) {
+            if (targetStoreId) {
+                const storeIds = await getStoreAndBranchIds(storeId);
+                if (!storeIds?.includes(targetStoreId)) {
+                    return handleError2(
+                        res,
+                        "You do not have permission to create items in this store.",
+                        StatusCodes.FORBIDDEN,
+                    );
+                }
+                finalStoreId = targetStoreId;
+            }
+        }
+
         if (!name || price === undefined) {
             return handleError2(
                 res,
@@ -190,53 +217,40 @@ export const createMenuItem = async (req: Request, res: Response) => {
             );
         }
 
-        const existingItemByName = await db
-            .select()
-            .from(menuItems)
-            .where(
-                and(
-                    eq(menuItems.name, name),
-                    eq(menuItems.storeId, storeId), // Filter by current user's storeId
-                ),
-            )
-            .limit(1);
+        const existingItemByName = await db.query.menuItems.findFirst({
+            where: and(
+                eq(menuItems.name, name),
+                eq(menuItems.storeId, finalStoreId),
+            ),
+        });
 
-        if (existingItemByName.length > 0) {
+        if (existingItemByName) {
             return handleError2(
                 res,
-                "Name already exists. Please edit the menu item rather than creating a new one.",
+                "Name already exists in this store. Please edit the menu item instead.",
                 StatusCodes.CONFLICT,
             );
         }
 
         let finalItemCode: string;
-
         if (providedItemCode) {
-            const existingItem = await db
-                .select()
-                .from(menuItems)
-                .where(
-                    and(
-                        eq(menuItems.itemCode, providedItemCode),
-                        eq(menuItems.storeId, storeId),
-                    ),
-                )
-                .limit(1);
+            const existingItem = await db.query.menuItems.findFirst({
+                where: and(
+                    eq(menuItems.itemCode, providedItemCode),
+                    eq(menuItems.storeId, finalStoreId),
+                ),
+            });
 
-            if (existingItem.length > 0) {
+            if (existingItem) {
                 return handleError2(
                     res,
-                    `Item code '${providedItemCode}' is already in use. Please provide a different one or leave it blank to auto-generate.`,
+                    `Item code '${providedItemCode}' is already in use in this store. Leave blank to auto-generate a unique code.`,
                     StatusCodes.CONFLICT,
                 );
             }
-
             finalItemCode = providedItemCode;
         } else {
-            // If no itemCode is provided, auto-generate a unique one
-            // This `generateUniqueItemCode` function should ideally ensure uniqueness globally or per store.
-            // It supposes to be unique globally and humanly readably. I will come back for it later.
-            finalItemCode = await generateUniqueItemCode(); // Assuming this is robust
+            finalItemCode = await generateUniqueItemCode();
         }
 
         const [newItem] = await db
@@ -246,57 +260,34 @@ export const createMenuItem = async (req: Request, res: Response) => {
                 itemCode: finalItemCode,
                 price: String(price),
                 isAvailable: isAvailable ?? true,
-                storeId,
+                storeId: finalStoreId,
             })
             .returning();
 
-        // Log activity for menu item creation
         await logActivity({
-            userId: req.user?.data.id,
-            storeId: storeId,
+            userId: currentUser.id,
+            storeId: finalStoreId,
             action: "MENU_ITEM_CREATED",
             entityId: newItem.id,
             entityType: "menuItem",
-            details: `Menu item "${newItem.name}" created by ${req.user?.data.firstName} ${req.user?.data.lastName}.`,
+            details: `Menu item "${newItem.name}" created by ${currentUser.firstName} ${currentUser.lastName}.`,
         });
 
         res.status(StatusCodes.CREATED).json(newItem);
     } catch (error: any) {
-        // console.error(error);
-        // *** Improved error handling for database unique constraint violations ***
-        if (error.cause && error.cause.code === "23505") {
-            // PostgreSQL unique violation error code
-            if (error.cause.constraint === "menuItems_name_store_unique") {
-                return handleError2(
-                    res,
-                    "A menu item with this name already exists in your store.",
-                    StatusCodes.CONFLICT,
-                    error instanceof Error ? error : undefined,
-                );
-            }
-            if (error.cause.constraint === "menuItems_itemCode_store_unique") {
-                return handleError2(
-                    res,
-                    "A menu item with this item code already exists in your store.",
-                    StatusCodes.CONFLICT,
-                    error instanceof Error ? error : undefined,
-                );
-            }
-            // If itemCode was globally unique and caused an error
-            if (error.cause.constraint === "menuItems_itemCode_unique") {
-                return handleError2(
-                    res,
-                    "A menu item with this item code already exists globally. Please provide a different one.",
-                    StatusCodes.CONFLICT,
-                    error instanceof Error ? error : undefined,
-                );
-            }
+        if (error.cause?.code === "23505") {
+            return handleError2(
+                res,
+                "A menu item with this name or item code already exists in the target store.",
+                StatusCodes.CONFLICT,
+                error instanceof Error ? error : undefined,
+            );
         }
-
         handleError2(
             res,
-            "Problem creating menu items, please try again.",
+            "Problem creating menu item, please try again.",
             StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
         );
     }
 };
@@ -306,6 +297,7 @@ export const updateMenuItem = async (req: CustomRequest, res: Response) => {
     try {
         const currentUser = req.user?.data;
         const storeId = currentUser?.storeId;
+        const userRole = currentUser?.role;
 
         if (!storeId) {
             return handleError2(
@@ -318,13 +310,27 @@ export const updateMenuItem = async (req: CustomRequest, res: Response) => {
         const { id } = req.params;
         const { name, price, isAvailable, itemCode } = req.body;
 
-        // CRITICAL: Fetch the item, making sure it belongs to the current user's store.
-        const findWhereClause = and(
-            eq(menuItems.id, id),
-            eq(menuItems.storeId, storeId),
-        );
+        let findWhereClause;
+        if (userRole === UserRoleEnum.MANAGER) {
+            const storeIds = await getStoreAndBranchIds(storeId);
+            if (!storeIds) {
+                return handleError2(
+                    res,
+                    "Associated store not found.",
+                    StatusCodes.NOT_FOUND,
+                );
+            }
+            findWhereClause = and(
+                eq(menuItems.id, id),
+                inArray(menuItems.storeId, storeIds),
+            );
+        } else {
+            findWhereClause = and(
+                eq(menuItems.id, id),
+                eq(menuItems.storeId, storeId),
+            );
+        }
 
-        // First, get the current state of the menu item
         const currentItem = await db.query.menuItems.findFirst({
             where: findWhereClause,
         });
@@ -332,35 +338,26 @@ export const updateMenuItem = async (req: CustomRequest, res: Response) => {
         if (!currentItem) {
             return handleError2(
                 res,
-                "Menu item not found",
+                "Menu item not found or you do not have permission to edit it.",
                 StatusCodes.NOT_FOUND,
             );
         }
 
-        const updateData: {
-            name?: string;
-            price?: string;
-            isAvailable?: boolean;
-            itemCode?: string;
-            lastModified?: Date;
-        } = {};
+        const updateData: { [key: string]: any } = {};
 
-        if (name !== undefined) {
-            // CRITICAL: Check for uniqueness of the updated name within the store
-            if (name !== currentItem.name) {
-                const existingItemWithName = await db.query.menuItems.findFirst(
-                    {
-                        where: and(
-                            eq(menuItems.name, name),
-                            eq(menuItems.storeId, storeId),
-                            ne(menuItems.id, id), // Exclude the current item
-                        ),
-                    },
-                );
-                if (existingItemWithName) {
+        if (name !== undefined && name !== currentItem.name) {
+            if (currentItem.storeId) {
+                const existing = await db.query.menuItems.findFirst({
+                    where: and(
+                        eq(menuItems.name, name),
+                        eq(menuItems.storeId, currentItem.storeId),
+                        ne(menuItems.id, id),
+                    ),
+                });
+                if (existing) {
                     return handleError2(
                         res,
-                        `An item with the name '${name}' already exists in your store.`,
+                        `An item with the name '${name}' already exists in this store.`,
                         StatusCodes.CONFLICT,
                     );
                 }
@@ -368,37 +365,28 @@ export const updateMenuItem = async (req: CustomRequest, res: Response) => {
             updateData.name = name;
         }
 
-        if (price !== undefined) updateData.price = String(price);
-        if (isAvailable !== undefined) updateData.isAvailable = isAvailable;
-
-        // If an item code is provided, use it.
-        if (itemCode !== undefined) {
-            // CRITICAL: Check for uniqueness of updated itemCode within the store
-            if (itemCode !== currentItem.itemCode) {
-                const existingItemWithCode = await db.query.menuItems.findFirst(
-                    {
-                        where: and(
-                            eq(menuItems.itemCode, itemCode),
-                            eq(menuItems.storeId, storeId),
-                            ne(menuItems.id, id),
-                        ),
-                    },
-                );
-                if (existingItemWithCode) {
+        if (itemCode !== undefined && itemCode !== currentItem.itemCode) {
+            if (currentItem.storeId) {
+                const existing = await db.query.menuItems.findFirst({
+                    where: and(
+                        eq(menuItems.itemCode, itemCode),
+                        eq(menuItems.storeId, currentItem.storeId),
+                        ne(menuItems.id, id),
+                    ),
+                });
+                if (existing) {
                     return handleError2(
                         res,
-                        `Item code '${itemCode}' is already in use by another item, create another one or leave it blank to auto-generate.`,
+                        `Item code '${itemCode}' is already in use in this store.`,
                         StatusCodes.CONFLICT,
                     );
                 }
             }
             updateData.itemCode = itemCode;
-        } else if (!currentItem.itemCode) {
-            // If no item code is provided AND the item doesn't have one, generate it.
-            updateData.itemCode = await generateUniqueItemCode();
         }
 
-        updateData.lastModified = new Date();
+        if (price !== undefined) updateData.price = String(price);
+        if (isAvailable !== undefined) updateData.isAvailable = isAvailable;
 
         if (Object.keys(updateData).length === 0) {
             return handleError2(
@@ -408,49 +396,40 @@ export const updateMenuItem = async (req: CustomRequest, res: Response) => {
             );
         }
 
-        const updatedItem = await db
+        updateData.lastModified = new Date();
+
+        const [updatedItem] = await db
             .update(menuItems)
             .set(updateData)
-            .where(findWhereClause)
+            .where(eq(menuItems.id, id))
             .returning();
 
-        if (updatedItem.length === 0) {
-            return handleError2(
-                res,
-                "Menu item not found or no changes made.",
-                StatusCodes.NOT_FOUND,
-            );
-        }
-
-        // Log activity for menu item update
         await logActivity({
-            userId: req.user?.data.id,
-            storeId: storeId,
+            userId: currentUser.id,
+            storeId: updatedItem.storeId,
             action: "MENU_ITEM_UPDATED",
-            entityId: updatedItem[0].id,
+            entityId: updatedItem.id,
             entityType: "menuItem",
-            details: `Menu item "${updatedItem[0].name}" updated by ${req.user?.data.firstName} ${req.user?.data.lastName}.`,
+            details: `Menu item "${updatedItem.name}" updated by ${currentUser.firstName} ${currentUser.lastName}.`,
         });
 
-        res.status(StatusCodes.OK).json(updatedItem[0]);
+        res.status(StatusCodes.OK).json(updatedItem);
     } catch (error) {
-        // Handle potential unique constraint errors, e.g. if the new name is already taken
-        console.error(error);
         handleError2(
             res,
-            "The provided name or item code is already in use.",
-            StatusCodes.CONFLICT,
+            "Problem updating menu item, please try again.",
+            StatusCodes.INTERNAL_SERVER_ERROR,
             error instanceof Error ? error : undefined,
         );
     }
 };
 
 // Delete a menu item
-export const deleteMenuItem = async (req: Request, res: Response) => {
+export const deleteMenuItem = async (req: CustomRequest, res: Response) => {
     try {
         const currentUser = req.user?.data;
         const storeId = currentUser?.storeId;
-
+        const userRole = currentUser?.role;
         const { id } = req.params;
 
         if (!storeId) {
@@ -461,15 +440,30 @@ export const deleteMenuItem = async (req: Request, res: Response) => {
             );
         }
 
-        // CRITICAL: Ensure the item being deleted belongs to the user's store
-        const whereClause = and(
-            eq(menuItems.id, id),
-            eq(menuItems.storeId, storeId),
-        );
+        let whereClause;
 
-        // if (!isManager && userStoreId) {
-        //     whereClause = and(whereClause, eq(menuItems.storeId, userStoreId));
-        // }
+        if (userRole === UserRoleEnum.MANAGER) {
+            const storeIds = await getStoreAndBranchIds(storeId);
+
+            if (!storeIds) {
+                return handleError2(
+                    res,
+                    "Associated store not found.",
+                    StatusCodes.NOT_FOUND,
+                );
+            }
+
+            whereClause = and(
+                eq(menuItems.id, id),
+                inArray(menuItems.storeId, storeIds),
+            );
+        } else {
+            // Admin can only delete it from their own store
+            whereClause = and(
+                eq(menuItems.id, id),
+                eq(menuItems.storeId, storeId),
+            );
+        }
 
         const deletedItem = await db
             .delete(menuItems)
@@ -477,29 +471,29 @@ export const deleteMenuItem = async (req: Request, res: Response) => {
             .returning();
 
         if (deletedItem.length === 0) {
-            return res
-                .status(StatusCodes.NOT_FOUND)
-                .json({ message: "Menu item not found" });
+            return res.status(StatusCodes.NOT_FOUND).json({
+                message:
+                    "Menu item not found or you don't have permission to delete it.",
+            });
         }
 
         // Log activity for menu item deletion
         await logActivity({
-            userId: req.user?.data.id,
-            storeId: storeId,
+            userId: currentUser.id,
+            storeId: deletedItem[0].storeId, // Log with the actual store ID of the item
             action: "MENU_ITEM_DELETED",
             entityId: deletedItem[0].id,
             entityType: "menuItem",
-            details: `Menu item "${deletedItem[0].name}" deleted by ${req.user?.data.firstName} ${req.user?.data.lastName}.`,
+            details: `Menu item "${deletedItem[0].name}" deleted by ${currentUser.firstName} ${currentUser.lastName}.`,
         });
 
         res.status(StatusCodes.OK).json({
             message: "Menu item deleted successfully",
         });
     } catch (error) {
-        // console.error(error);
         return handleError2(
             res,
-            "Problem deleting menu items, please try again.",
+            "Problem deleting menu item, please try again.",
             StatusCodes.INTERNAL_SERVER_ERROR,
             error instanceof Error ? error : undefined,
         );
