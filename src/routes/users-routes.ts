@@ -3,6 +3,7 @@ import express from "express";
 import * as controller from "../controllers/user-controller";
 import { isAuthorized } from "../middlewares/is-authorised-middleware";
 import { UserRoleEnum } from "../types/enums";
+import { isManager } from "../middlewares/is-manager-middleware";
 
 const router = express.Router();
 
@@ -21,6 +22,7 @@ router.post(
 
 router.patch("/:id", controller.updateUser);
 router.patch("/update-password", controller.updatePassword);
+router.patch("/:id/change-store", isManager, controller.changeUserStore);
 
 router.delete(
     "/:id",

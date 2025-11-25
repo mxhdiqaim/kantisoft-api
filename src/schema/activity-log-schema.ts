@@ -40,6 +40,7 @@ export const activityActionEnum = pgEnum("activityAction", [
     "ORDER_STOCK_DECREMENTED",
     "INVENTORY_DISCONTINUED",
     "INVENTORY_RECORD_DELETED",
+    "USER_STORE_CHANGED",
 ]);
 
 export const entityTypeEnum = pgEnum("entityType", [

@@ -266,39 +266,75 @@ export const getUserById = async (req: CustomRequest, res: Response) => {
     try {
         const { id: targetUserId } = req.params;
         const currentUser = req.user?.data;
-        const userStoreId = currentUser?.storeId;
+        const storeId = currentUser?.storeId;
 
-        // Check if a user is authenticated
-        if (!currentUser || !userStoreId) {
-            return handleError(
+        if(!storeId) {
+            return handleError2(
                 res,
-                "Authentication required.",
-                StatusCodeEnum.UNAUTHORIZED,
+                "Authenticated user is not associated with any store.",
+                StatusCodes.FORBIDDEN,
+            )
+        }
+
+        // // Check if a user is authenticated
+        // if (!currentUser || !userStoreId) {
+        //     return handleError(
+        //         res,
+        //         "Authentication required.",
+        //         StatusCodeEnum.UNAUTHORIZED,
+        //     );
+        // }
+
+
+        // Find the current user's store and its hierarchy (parent and branches)
+        const userStore = await db.query.stores.findFirst({
+            where: eq(stores.id, storeId),
+            with: {
+                parent: true,
+                branches: true,
+            },
+        });
+
+        if (!userStore) {
+            return handleError2(
+                res,
+                "Associated store not found.",
+                StatusCodes.NOT_FOUND,
             );
         }
 
-        // Fetch the user profile that is being requested
+        // Collect all relevant store IDs
+        const accessibleStoreIds = new Set<string>([storeId]);
+
+        if (userStore.parent) {
+            accessibleStoreIds.add(userStore.parent.id);
+        }
+
+        userStore.branches?.forEach((branch) => accessibleStoreIds.add(branch.id));
+
+
+        // Fetch the target user if they are in the accessible store network
         const targetUser = await db.query.users.findFirst({
             where: and(
                 eq(users.id, targetUserId),
-                eq(users.storeId, String(userStoreId)), // <-- CRITICAL FIX: Add multi-tenancy filter
+                inArray(users.storeId, Array.from(accessibleStoreIds)),
             ),
         });
 
         if (!targetUser) {
-            return handleError(
+            return handleError2(
                 res,
-                "User not found.",
-                StatusCodeEnum.NOT_FOUND,
+                "User not found or you do not have permission to view this profile.",
+                StatusCodes.NOT_FOUND,
             );
         }
 
-        // Authorization Logic
+        // Authorisation Logic
         const isManager = currentUser.role === UserRoleEnum.MANAGER;
         const isOwnProfile = currentUser.id === targetUser.id;
         const isAdminInSameStore =
             currentUser.role === UserRoleEnum.ADMIN &&
-            currentUser.storeId === targetUser.storeId;
+            storeId === targetUser.storeId;
 
         // Deny access if none of the conditions are met
         if (!isManager && !isOwnProfile && !isAdminInSameStore) {
@@ -319,16 +355,16 @@ export const getUserById = async (req: CustomRequest, res: Response) => {
         //     details: `User ${targetUser.firstName} ${targetUser.lastName} viewed by ${currentUser.firstName} ${currentUser.lastName}.`,
         // });
 
-        // 5. Return user data without the password
+        // Return user data without the password
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { password, ...userWithoutPassword } = targetUser;
         res.status(StatusCodeEnum.OK).json(userWithoutPassword);
     } catch (error) {
-        console.error("Error fetching user by ID:", error);
-        handleError(
+        handleError2(
             res,
             "Failed to fetch user.",
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
         );
     }
 };
@@ -585,42 +621,61 @@ export const updateUser = async (req: CustomRequest, res: Response) => {
     try {
         const { id: targetUserId } = req.params;
         const currentUser = req.user?.data;
+        const storeId = currentUser?.storeId;
         const updateData = req.body;
 
         // Authenticated check
-        if (!currentUser) {
-            return handleError(
+        if (!storeId) {
+            return handleError2(
                 res,
-                "Authentication required.",
-                StatusCodeEnum.UNAUTHORIZED,
+                "Must belong to a store to perform this action.",
+                StatusCodes.UNAUTHORIZED,
             );
         }
 
-        // Fetch the user to be updated
+        // Get all stores managed by the current user (main store + branches)
+        const mainStore = await db.query.stores.findFirst({
+            where: eq(stores.id, storeId),
+            with: { branches: true },
+        });
+
+        if (!mainStore) {
+            return handleError2(
+                res,
+                "Your associated store could not be found.",
+                StatusCodes.NOT_FOUND,
+            );
+        }
+
+        const accessibleStoreIds = [
+            mainStore.id,
+            ...(mainStore.branches?.map((branch) => branch.id) || []),
+        ];
+
+        // Fetch the user to be updated from within the accessible store network
         const targetUser = await db.query.users.findFirst({
             where: and(
                 eq(users.id, targetUserId),
-                eq(users.storeId, String(currentUser.storeId)), // <-- CRITICAL FIX: Add multi-tenancy filter
+                inArray(users.storeId, accessibleStoreIds),
             ),
         });
 
         if (!targetUser) {
-            return handleError(
+            return handleError2(
                 res,
-                "User not found.",
-                StatusCodeEnum.NOT_FOUND,
+                "User not found or not within your managed stores.",
+                StatusCodes.NOT_FOUND,
             );
         }
 
-        // Sanitize payload - password cannot be updated here
+        // Sanitise payload - password cannot be updated here
         delete updateData.password;
         delete updateData.id; // Prevent changing the ID
 
+        // Authz Logic
         const isSelfUpdate = currentUser.id === targetUserId;
         const isManager = currentUser.role === UserRoleEnum.MANAGER;
         const isAdmin = currentUser.role === UserRoleEnum.ADMIN;
-
-        // Authorization Logic
         let canUpdate = false;
 
         if (isSelfUpdate) {
@@ -633,10 +688,10 @@ export const updateUser = async (req: CustomRequest, res: Response) => {
             // Managers can update any user in their store
             canUpdate = true;
         } else if (isAdmin) {
-            // Admins can update users in their store, but not Managers
+            // Admins can update users (not Managers/Admins) in their store or branches
             if (
                 targetUser.role !== UserRoleEnum.MANAGER &&
-                currentUser.storeId === targetUser.storeId
+                targetUser.role !== UserRoleEnum.ADMIN
             ) {
                 // Admins cannot change a user's role or store assignment
                 delete updateData.role;
@@ -653,7 +708,15 @@ export const updateUser = async (req: CustomRequest, res: Response) => {
             );
         }
 
-        // 5. Perform the update
+        if (Object.keys(updateData).length === 0) {
+            return handleError2(
+                res,
+                "No valid fields provided for update.",
+                StatusCodes.BAD_REQUEST,
+            );
+        }
+
+        // Perform the update
         if (Object.keys(updateData).length === 0) {
             return handleError(
                 res,
@@ -662,14 +725,14 @@ export const updateUser = async (req: CustomRequest, res: Response) => {
             );
         }
 
-        // Multi-tenancy enforcement: CRITICAL - Secure the update statement with storeId
+        // Perform the update, ensuring the target is still in an accessible store
         const [updatedUser] = await db
             .update(users)
             .set({ ...updateData, lastModified: new Date() })
             .where(
                 and(
                     eq(users.id, targetUserId),
-                    eq(users.storeId, String(currentUser.storeId)), // <-- CRITICAL FIX: Secure the update statement
+                    inArray(users.storeId, accessibleStoreIds),
                 ),
             )
             .returning();
@@ -694,6 +757,139 @@ export const updateUser = async (req: CustomRequest, res: Response) => {
             res,
             "Failed to update user.",
             StatusCodeEnum.INTERNAL_SERVER_ERROR,
+        );
+    }
+};
+
+/**
+ * @desc        Change a user's store (Manager only)
+ * @route       PATCH /api/v1/users/:targetUserId/change-store
+ * @access      Private (Manager)
+ * @param       id The ID of the user to move.
+ * @body        { "newStoreId": "string" }
+ */
+export const changeUserStore = async (req: CustomRequest, res: Response) => {
+    try {
+        const { id: targetUserId } = req.params;
+        const { newStoreId } = req.body;
+        const currentUser = req.user?.data;
+        const currentStoreId = currentUser?.storeId;
+
+        if(!currentStoreId) {
+            return handleError2(
+                res,
+                "Authenticated user is not associated with any store.",
+                StatusCodes.UNAUTHORIZED,
+            )
+        }
+
+        if (!newStoreId) {
+            return handleError2(
+                res,
+                "New store ID is required.",
+                StatusCodes.BAD_REQUEST,
+            );
+        }
+
+        if (currentUser.role !== UserRoleEnum.MANAGER) {
+            return handleError2(
+                res,
+                "Only Managers can change user stores.",
+                StatusCodes.UNAUTHORIZED
+            )
+        }
+
+        if (currentStoreId === targetUserId) {
+            return handleError2(
+                res,
+                "Managers cannot change their own store.",
+                StatusCodes.FORBIDDEN,
+            );
+        }
+
+        // Get all stores managed by the current manager
+        const mainStore = await db.query.stores.findFirst({
+            where: eq(stores.id, String(currentUser.storeId)),
+            with: { branches: true },
+        });
+
+        if (!mainStore) {
+            return handleError2(
+                res,
+                "Store not found.",
+                StatusCodes.NOT_FOUND,
+            );
+        }
+
+        const managedStoreIds = [
+            mainStore.id,
+            ...(mainStore.branches?.map((branch) => branch.id) || []),
+        ];
+
+        // Validate the new store exists and is managed by the manager
+        if (!managedStoreIds.includes(newStoreId)) {
+            return handleError2(
+                res,
+                "New store not found or not managed by you.",
+                StatusCodes.FORBIDDEN,
+            );
+        }
+
+        // Fetch the target user and validate their role and current store
+        const targetUser = await db.query.users.findFirst({
+            where: and(
+                eq(users.id, targetUserId),
+                inArray(users.storeId, managedStoreIds),
+            ),
+        });
+
+        if (!targetUser) {
+            return handleError2(
+                res,
+                "User not found or not within your managed stores.",
+                StatusCodes.NOT_FOUND,
+            );
+        }
+
+        const allowedRolesToChange = [
+            UserRoleEnum.ADMIN,
+            UserRoleEnum.USER,
+            UserRoleEnum.GUEST,
+        ];
+        if (!allowedRolesToChange.includes(targetUser.role as UserRoleEnum)) {
+            return handleError2(
+                res,
+                "You can only change the store for Admins, Users, or Guests.",
+                StatusCodes.FORBIDDEN,
+            );
+        }
+
+        // Perform the update
+        const [updatedUser] = await db
+            .update(users)
+            .set({ storeId: newStoreId, lastModified: new Date() })
+            .where(eq(users.id, targetUserId))
+            .returning();
+
+        // 6. Log and respond
+        await logActivity({
+            userId: currentUser.id,
+            storeId: String(currentUser.storeId),
+            action: "USER_STORE_CHANGED",
+            entityId: targetUserId,
+            entityType: "user",
+            details: `Store for user ${targetUser.firstName} ${targetUser.lastName} changed to store ID ${newStoreId}.`,
+        });
+
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { password, ...userWithoutPassword } = updatedUser;
+        res.status(StatusCodes.OK).json(userWithoutPassword);
+    } catch (error) {
+        handleError2(
+            res,
+            "Failed to change user store.",
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
         );
     }
 };
@@ -815,7 +1011,6 @@ export const loginUser = async (
                     error instanceof Error ? error.message : "Server error",
                     StatusCodeEnum.INTERNAL_SERVER_ERROR,
                 );
-                return res.status(500).json(error);
             }
 
             if (!user) {

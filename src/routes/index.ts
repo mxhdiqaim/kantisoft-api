@@ -31,7 +31,7 @@ router.use("/auth", auth); // Handles /api/v1/auth/register, /api/v1/auth/login,
 router.use(protectedRoute);
 
 // Store CRUD is for Managers only
-router.use("/stores", stores);
+// router.use("/stores", stores);
 
 // Inventory management routes
 router.use("/inventory", inventory);
@@ -44,6 +44,7 @@ router.use(
 );
 
 // These routes need to be protected and scoped to the user's store
+router.use("/stores", checkUserHasStore, stores);
 router.use("/users", checkUserHasStore, users);
 router.use("/menu-items", checkUserHasStore, menuItems);
 router.use("/orders", checkUserHasStore, orders);

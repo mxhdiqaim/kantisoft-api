@@ -14,9 +14,5 @@ export const isManager = (
         return next();
     }
 
-    return handleError(
-        res,
-        "Access denied. System Manager role required",
-        StatusCodes.FORBIDDEN,
-    );
+    return handleError(res, "Access denied.", StatusCodes.FORBIDDEN);
 };
