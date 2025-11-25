@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
 export const storeTypeEnum = pgEnum("storeType", [
@@ -23,4 +22,3 @@ export const stores = pgTable("stores", {
 });
 
 export type StoreType = typeof stores.$inferSelect;
-export type NewStore = typeof stores.$inferInsert;

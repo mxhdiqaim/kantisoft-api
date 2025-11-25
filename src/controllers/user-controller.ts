@@ -1,12 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { and, eq, ne, or, SQL } from "drizzle-orm";
+import { and, eq, inArray, ne, or, SQL } from "drizzle-orm";
 import { NextFunction, Request, Response } from "express";
 import passport from "passport";
 
 import { generateToken } from "../config/jwt-config";
 import db from "../db";
 import { InsertUserSchemaT, users } from "../schema/users-schema";
-import { handleError } from "../service/error-handling";
+import { handleError, handleError2 } from "../service/error-handling";
 import { passwordHashService } from "../service/password-hash-service";
 import { StatusCodeEnum, UserRoleEnum, UserStatusEnum } from "../types/enums";
 import { stores } from "../schema/stores-schema";
@@ -182,7 +182,7 @@ export const registerManagerAndStore = async (req: Request, res: Response) => {
 
 /**
  * @desc    Get all users (Admin only)
- * @route   GET /users
+ * @route   GET /api/v1/users
  * @access  Private Managers | Admins
  *          Managers can see all users in their store, Admins can on only the users in their store
  */
@@ -191,19 +191,33 @@ export const getAllUsers = async (req: CustomRequest, res: Response) => {
         const currentUser = req.user?.data;
         const storeId = currentUser?.storeId;
 
-        // Multi-tenancy check: Ensure the user is authenticated and has a storeId.
-        if (
-            !storeId ||
-            (currentUser?.role !== UserRoleEnum.MANAGER &&
-                currentUser?.role !== UserRoleEnum.ADMIN)
-        ) {
-            return handleError(
+        if (!storeId) {
+            return handleError2(
                 res,
-                "You do not have permission to view all users.",
-                StatusCodeEnum.FORBIDDEN,
+                "Authenticated user is not associated with any store.",
+                StatusCodes.FORBIDDEN,
             );
         }
 
+        // Find the main store and its branches
+        const mainStore = await db.query.stores.findFirst({
+            where: eq(stores.id, storeId),
+            with: {
+                branches: true,
+            },
+        });
+
+        if (!mainStore) {
+            return handleError2(res, "Store not found.", StatusCodes.NOT_FOUND);
+        }
+
+        // Collect the ID of the main store and all its branch IDs
+        const storeIds = [
+            mainStore.id,
+            ...(mainStore.branches?.map((branch) => branch.id) || []),
+        ];
+
+        // Fetch all users from the collected store IDs
         const allUsers = await db
             .select({
                 id: users.id,
@@ -215,24 +229,30 @@ export const getAllUsers = async (req: CustomRequest, res: Response) => {
                 status: users.status,
                 createdAt: users.createdAt,
                 lastModified: users.lastModified,
+                store: {
+                    id: stores.id,
+                    name: stores.name,
+                    location: stores.location,
+                },
             })
             .from(users)
-            .where(eq(users.storeId, String(storeId)));
+            .leftJoin(stores, eq(users.storeId, stores.id))
+            .where(
+                and(
+                    inArray(users.storeId, storeIds),
+                    ne(users.status, UserStatusEnum.DELETED)
+                )
+            );
 
-        // await logActivity({
-        //     userId: currentUser.id,
-        //     storeId: storeId,
-        //     action: "USERS_VIEWED",
-        //     details: `All users viewed by ${currentUser.firstName} ${currentUser.lastName}.`,
-        // });
+        res.status(StatusCodes.OK).json(allUsers);
 
-        res.status(StatusCodeEnum.OK).json(allUsers);
     } catch (error) {
-        console.error("Error fetching all users:", error);
-        return handleError(
+        // console.error("Error fetching all users:", error);
+        return handleError2(
             res,
             "Failed to fetch users.",
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
         );
     }
 };
