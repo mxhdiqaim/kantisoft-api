@@ -1,5 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import {pgEnum, pgTable, text, timestamp, uuid} from "drizzle-orm/pg-core";
+import { pgEnum, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+
+export const branchTypeEnum = pgEnum("branchType", ["branch", "main"]);
 
 export const storeTypeEnum = pgEnum("storeType", [
     "restaurant",
@@ -16,6 +18,7 @@ export const stores = pgTable("stores", {
     storeParentId: uuid("storeParentId").references((): any => stores.id, {
         onDelete: "set null",
     }),
+    // branchType: branchTypeEnum("branchType").default("branch"),
     createdAt: timestamp("createdAt").defaultNow().notNull(),
     updatedAt: timestamp("updatedAt")
         .defaultNow()
