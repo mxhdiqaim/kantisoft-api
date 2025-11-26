@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import {and, desc, eq, inArray, ne} from "drizzle-orm";
+import {and, count, desc, eq, inArray, ne} from "drizzle-orm";
 import {Response} from "express";
 import db from "../db";
 import {menuItems} from "../schema/menu-items-schema";
@@ -10,63 +10,26 @@ import {logActivity} from "../service/activity-logger";
 import {StatusCodes} from "http-status-codes";
 import {UserRoleEnum} from "../types/enums";
 import {getStoreAndBranchIds} from "../service/store-service";
+import {stores} from "../schema/stores-schema";
 
-// Get all menu items from the main store and its branches
-export const getAllMenuItemsFromStoreAndBranches = async (
-    req: CustomRequest,
-    res: Response,
-) => {
-    try {
-        const currentUser = req.user?.data;
-        const storeId = currentUser?.storeId;
-
-        if (!storeId) {
-            return handleError2(
-                res,
-                "You must be associated with a store to view menu items.",
-                StatusCodes.FORBIDDEN,
-            );
-        }
-
-        const storeIds = await getStoreAndBranchIds(storeId);
-
-        if (!storeIds) {
-            return handleError2(
-                res,
-                "Associated store not found.",
-                StatusCodes.NOT_FOUND,
-            );
-        }
-
-        if (storeIds.length === 0) {
-            return res.status(StatusCodes.OK).json([]);
-        }
-
-        // Fetch all menu items from the collected store IDs
-        const allMenuItems = await db.query.menuItems.findMany({
-            where: inArray(menuItems.storeId, storeIds),
-            orderBy: [desc(menuItems.createdAt)],
-            with: { store: { columns: { name: true } } },
-        });
-
-        res.status(StatusCodes.OK).json(allMenuItems);
-    } catch (error) {
-        // console.error(error);
-        handleError2(
-            res,
-            "Problem loading menu items from store and branches, please try again",
-            StatusCodes.INTERNAL_SERVER_ERROR,
-            error instanceof Error ? error : undefined,
-        );
-    }
-};
-
-// Get all menu items
+/**
+ * @desc    Get all menu items with pagination and role-based filtering.
+ * @route   GET /api/v1/menu-items
+ * @access  Private (Manager, Admin, User, Guest)
+ * @query   page {number} - The page number for pagination.
+ * @query   limit {number} - The number of items per page.
+ * @query   targetStoreId {string} - For Managers: 'all' for all managed stores, or a specific store ID.
+ */
 export const getAllMenuItems = async (req: CustomRequest, res: Response) => {
     try {
         const currentUser = req.user?.data;
         const storeId = currentUser?.storeId;
         const userRole = currentUser?.role;
+        const { targetStoreId, page = '1', limit = '10' } = req.query;
+
+        const pageNumber = parseInt(page as string, 10);
+        const limitNumber = parseInt(limit as string, 10);
+        const offset = (pageNumber - 1) * limitNumber;
 
         if (!storeId) {
             return handleError2(
@@ -79,26 +42,47 @@ export const getAllMenuItems = async (req: CustomRequest, res: Response) => {
         let whereClause;
 
         if (userRole === UserRoleEnum.MANAGER) {
-            const storeIds = await getStoreAndBranchIds(storeId);
-            if (!storeIds) {
-                return handleError2(
-                    res,
-                    "Associated store not found.",
-                    StatusCodes.NOT_FOUND,
-                );
+            const manageableStoreIds = await getStoreAndBranchIds(storeId);
+            if (!manageableStoreIds) {
+                return handleError2(res, "Associated stores not found.", StatusCodes.NOT_FOUND);
             }
-            whereClause = inArray(menuItems.storeId, storeIds);
+
+            if (targetStoreId === "all") {
+                whereClause = inArray(menuItems.storeId, manageableStoreIds);
+            } else if (typeof targetStoreId === 'string' && manageableStoreIds.includes(targetStoreId)) {
+                whereClause = eq(menuItems.storeId, targetStoreId);
+            } else {
+                const currentStore = await db.query.stores.findFirst({
+                    where: eq(stores.id, storeId),
+                    columns: { storeParentId: true },
+                });
+                const mainStoreId = currentStore?.storeParentId || storeId;
+                whereClause = eq(menuItems.storeId, mainStoreId);
+            }
         } else {
             whereClause = eq(menuItems.storeId, storeId);
         }
 
+        const [totalItemsResult] = await db.select({ value: count() }).from(menuItems).where(whereClause);
+        const totalItems = totalItemsResult.value;
+
         const allMenuItems = await db.query.menuItems.findMany({
             where: whereClause,
             orderBy: [desc(menuItems.createdAt)],
+            limit: limitNumber,
+            offset: offset,
             with: { store: { columns: { name: true } } },
         });
 
-        res.status(StatusCodes.OK).json(allMenuItems);
+        res.status(StatusCodes.OK).json({
+            data: allMenuItems,
+            pagination: {
+                totalItems,
+                totalPages: Math.ceil(totalItems / limitNumber),
+                currentPage: pageNumber,
+                itemsPerPage: limitNumber,
+            },
+        });
     } catch (error) {
         handleError2(
             res,
@@ -109,7 +93,11 @@ export const getAllMenuItems = async (req: CustomRequest, res: Response) => {
     }
 };
 
-// Get a single menu item by ID
+/**
+ * @desc    Get a single menu item by its ID.
+ * @route   GET /api/v1/menu-items/:id
+ * @access  Private (Manager, Admin, User, Guest - within their accessible stores)
+ */
 export const getMenuItemById = async (req: CustomRequest, res: Response) => {
     try {
         const currentUser = req.user?.data;
@@ -170,7 +158,16 @@ export const getMenuItemById = async (req: CustomRequest, res: Response) => {
     }
 };
 
-// Create a new menu item
+/**
+ * @desc    Create a new menu item.
+ * @route   POST /api/v1/menu-items
+ * @access  Private (Manager, Admin)
+ * @body    name {string} - The name of the menu item.
+ * @body    price {number} - The price of the menu item.
+ * @body    isAvailable {boolean} - [Optional] Availability of the item.
+ * @body    itemCode {string} - [Optional] A unique code for the item.
+ * @body    storeId {string} - [Optional] For Managers: The ID of the store to add the item to.
+ */
 export const createMenuItem = async (req: CustomRequest, res: Response) => {
     try {
         const currentUser = req.user?.data;
@@ -292,7 +289,11 @@ export const createMenuItem = async (req: CustomRequest, res: Response) => {
     }
 };
 
-// Update a menu item
+/**
+ * @desc    Update an existing menu item.
+ * @route   PATCH /api/v1/menu-items/:id
+ * @access  Private (Manager, Admin - within their accessible stores)
+ */
 export const updateMenuItem = async (req: CustomRequest, res: Response) => {
     try {
         const currentUser = req.user?.data;
@@ -424,7 +425,11 @@ export const updateMenuItem = async (req: CustomRequest, res: Response) => {
     }
 };
 
-// Delete a menu item
+/**
+ * @desc    Delete a menu item.
+ * @route   DELETE /api/v1/menu-items/:id
+ * @access  Private (Manager, Admin - within their accessible stores)
+ */
 export const deleteMenuItem = async (req: CustomRequest, res: Response) => {
     try {
         const currentUser = req.user?.data;

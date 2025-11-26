@@ -6,11 +6,6 @@ import { UserRoleEnum } from "../types/enums";
 const router = express.Router();
 
 router.get("/", controller.getAllMenuItems);
-router.get(
-    "/store-and-branches",
-    isAuthorized([UserRoleEnum.MANAGER, UserRoleEnum.ADMIN]),
-    controller.getAllMenuItemsFromStoreAndBranches,
-);
 router.get("/:id", controller.getMenuItemById);
 
 router.post(
