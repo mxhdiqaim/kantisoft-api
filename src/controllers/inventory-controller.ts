@@ -553,8 +553,8 @@ export const decrementStockForOrder = async (
 
             if (!currentRecord) {
                 // If the inventory record is missing, throw an error and roll back the Order.
-                throw new Error(
-                    `Inventory record not found for menu item ID: ${item.menuItemId}`,
+                throw new InsufficientStockError(
+                    `Inventory record not found for menu item ID: ${item.menuItemId}. Item is not tracked.`,
                 );
             }
             if (currentRecord.quantity < item.quantity) {

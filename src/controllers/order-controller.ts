@@ -18,10 +18,19 @@ import { InsufficientStockError } from "../errors";
 
 export const getAllOrders = async (req: CustomRequest, res: Response) => {
     try {
-        const userStoreId = req.userStoreId;
-        const whereClause = userStoreId
-            ? eq(orders.storeId, userStoreId)
-            : undefined;
+        const currentUser = req.user?.data;
+        const storeId = currentUser?.storeId;
+        // const userStoreId = req.userStoreId;
+
+        if (!storeId) {
+            return handleError2(
+                res,
+                "User not associated with a store.",
+                StatusCodes.UNAUTHORIZED,
+            );
+        }
+
+        const whereClause = eq(orders.storeId, storeId)
 
         const allOrders = await db.query.orders.findMany({
             where: whereClause,
@@ -177,11 +186,10 @@ export const getOrdersByPeriod = async (req: CustomRequest, res: Response) => {
 export const getOrderById = async (req: CustomRequest, res: Response) => {
     try {
         const { id } = req.params;
-        // const userStoreId = req.userStoreId;
-        const userStoreId = req.userStoreId;
-        // const isManager = req.user?.data.role === UserRoleEnum.MANAGER;
+        const currentUser = req.user?.data;
+        const storeId = currentUser?.storeId;
 
-        if (!userStoreId) {
+        if (!storeId) {
             return handleError2(
                 res,
                 "User not associated with a store.",
@@ -189,11 +197,19 @@ export const getOrderById = async (req: CustomRequest, res: Response) => {
             );
         }
 
+        // if (!userStoreId) {
+        //     return handleError2(
+        //         res,
+        //         "User not associated with a store.",
+        //         StatusCodes.UNAUTHORIZED,
+        //     );
+        // }
+
         // CRITICAL FIX: Always filter by the user's storeId.
         // A manager should only see orders from their own store.
         const whereClause = and(
             eq(orders.id, id),
-            eq(orders.storeId, userStoreId),
+            eq(orders.storeId, storeId),
         );
 
         // if (!isManager && userStoreId) {
@@ -438,11 +454,11 @@ export const updateOrderStatus = async (req: CustomRequest, res: Response) => {
     try {
         const { id } = req.params;
         const { orderStatus } = req.body; // e.g. 'pending', 'completed', 'cancelled'
-        // const userStoreId = req.userStoreId;
-        const userStoreId = req.userStoreId;
-        // const isManager = req.user?.data.role === UserRoleEnum.MANAGER;
 
-        if (!userStoreId) {
+        const currentUser = req.user?.data;
+        const storeId = currentUser?.storeId;
+
+        if (!storeId) {
             return handleError2(
                 res,
                 "User not associated with a store.",
@@ -450,13 +466,25 @@ export const updateOrderStatus = async (req: CustomRequest, res: Response) => {
             );
         }
 
-        if (!orderItems) {
-            return handleError2(
-                res,
-                "Order status is required.",
-                StatusCodes.BAD_REQUEST,
-            );
-        }
+        // // const userStoreId = req.userStoreId;
+        // const userStoreId = req.userStoreId;
+        // // const isManager = req.user?.data.role === UserRoleEnum.MANAGER;
+        //
+        // if (!userStoreId) {
+        //     return handleError2(
+        //         res,
+        //         "User not associated with a store.",
+        //         StatusCodes.UNAUTHORIZED,
+        //     );
+        // }
+        //
+        // if (!orderStatus) {
+        //     return handleError2(
+        //         res,
+        //         "Order status is required.",
+        //         StatusCodes.BAD_REQUEST,
+        //     );
+        // }
 
         if (!orderStatus) {
             return handleError2(
@@ -469,7 +497,7 @@ export const updateOrderStatus = async (req: CustomRequest, res: Response) => {
         // Add the condition that the order must be 'pending' to be updated
         const whereClause = and(
             eq(orders.id, id),
-            eq(orders.storeId, userStoreId),
+            eq(orders.storeId, storeId),
             eq(orders.orderStatus, OrderStatusEnum.PENDING),
         );
 
@@ -490,7 +518,7 @@ export const updateOrderStatus = async (req: CustomRequest, res: Response) => {
         // Log activity for order status update
         await logActivity({
             userId: req.user?.data.id,
-            storeId: userStoreId,
+            storeId: storeId,
             action: "ORDER_STATUS_UPDATED",
             entityId: updatedOrder[0].id,
             entityType: "order",
@@ -513,9 +541,10 @@ export const updateOrderStatus = async (req: CustomRequest, res: Response) => {
 export const deleteOrder = async (req: CustomRequest, res: Response) => {
     try {
         const { id } = req.params;
-        const userStoreId = req.userStoreId;
+        const currentUser = req.user?.data;
+        const storeId = currentUser?.storeId;
 
-        if (!userStoreId) {
+        if (!storeId) {
             return handleError2(
                 res,
                 "User not associated with a store.",
@@ -526,8 +555,8 @@ export const deleteOrder = async (req: CustomRequest, res: Response) => {
         // Add the condition that the order must be 'pending' to be deleted
         const whereClause = and(
             eq(orders.id, id),
-            eq(orders.storeId, userStoreId),
-            eq(orders.orderStatus, OrderStatusEnum.PENDING), // Your existing logic is great here
+            eq(orders.storeId, storeId),
+            eq(orders.orderStatus, OrderStatusEnum.PENDING),
         );
 
         // The 'onDelete: cascade' in the schema will automatically delete related orderItems.
@@ -547,7 +576,7 @@ export const deleteOrder = async (req: CustomRequest, res: Response) => {
         // Log activity for order deletion
         await logActivity({
             userId: req.user?.data.id,
-            storeId: userStoreId,
+            storeId: storeId,
             action: "ORDER_DELETED",
             entityId: deletedOrder[0].id,
             entityType: "order",
@@ -571,10 +600,19 @@ export const deleteOrder = async (req: CustomRequest, res: Response) => {
 // Get the most ordered item
 export const getMostOrderedItem = async (req: CustomRequest, res: Response) => {
     try {
-        const userStoreId = req.userStoreId;
-        const whereClause = userStoreId
-            ? eq(orders.storeId, userStoreId)
-            : undefined;
+        const currentUser = req.user?.data;
+        const storeId = currentUser?.storeId;
+        // const userStoreId = req.userStoreId;
+
+        if (!storeId) {
+            return handleError2(
+                res,
+                "User not associated with a store.",
+                StatusCodes.UNAUTHORIZED,
+            );
+        }
+
+        const whereClause = eq(orders.storeId, storeId)
 
         // Aggregate total quantity for each menu item
         const result = await db
@@ -630,11 +668,11 @@ export const getOrderByReference = async (
 ) => {
     try {
         const { reference } = req.params;
-        const userStoreId = req.userStoreId;
+        const currentUser = req.user?.data;
+        const storeId = currentUser?.storeId;
         // const userStoreId = req.userStoreId;
-        // const isManager = req.user?.data.role === UserRoleEnum.MANAGER;
 
-        if (!userStoreId) {
+        if (!storeId) {
             return handleError2(
                 res,
                 "User not associated with a store.",
@@ -642,10 +680,21 @@ export const getOrderByReference = async (
             );
         }
 
+        // const userStoreId = req.userStoreId;
+        // const isManager = req.user?.data.role === UserRoleEnum.MANAGER;
+
+        // if (!userStoreId) {
+        //     return handleError2(
+        //         res,
+        //         "User not associated with a store.",
+        //         StatusCodes.UNAUTHORIZED,
+        //     );
+        // }
+
         // CRITICAL FIX: The where clause must ALWAYS filter by the storeId
         const whereClause = and(
             eq(orders.reference, reference),
-            eq(orders.storeId, userStoreId),
+            eq(orders.storeId, storeId),
         );
 
         // if (!isManager && userStoreId) {

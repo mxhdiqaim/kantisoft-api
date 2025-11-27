@@ -13,6 +13,7 @@ import { checkUserHasStore } from "../middlewares/check-user-has-store";
 import { isAuthorized } from "../middlewares/is-authorised-middleware";
 import { UserRoleEnum } from "../types/enums";
 import { StatusCodes } from "http-status-codes";
+import { handleTargetStore } from "../middlewares/handle-target-store-middleware";
 
 const router = express.Router();
 
@@ -30,8 +31,8 @@ router.use("/auth", auth); // Handles /api/v1/auth/register, /api/v1/auth/login,
 // All subsequent routes are protected
 router.use(protectedRoute);
 
-// Store CRUD is for Managers only
-// router.use("/stores", stores);
+// Global middleware to handle store targeting for Managers
+router.use(handleTargetStore);
 
 // Inventory management routes
 router.use("/inventory", inventory);

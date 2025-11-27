@@ -280,37 +280,37 @@ export const updateStore = async (req: CustomRequest, res: Response) => {
  */
 export const deleteStore = async (req: CustomRequest, res: Response) => {
     try {
-        const { id } = req.params;
+        const { id: targetStoreId } = req.params;
         const currentUser = req.user?.data;
-        const userStoreId = currentUser?.storeId;
+        const storeId = currentUser?.storeId;
         const userRole = currentUser?.role;
 
         if (userRole !== UserRoleEnum.MANAGER) {
             return handleError2(res, "Only managers can delete stores.", StatusCodes.FORBIDDEN);
         }
 
-        if (!userStoreId) {
+        if (!storeId) {
             return handleError2(res, "Authentication required.", StatusCodes.UNAUTHORIZED);
         }
 
-        if (id === userStoreId) {
+        if (targetStoreId === storeId) {
             return handleError2(res, "Cannot delete your own main store.", StatusCodes.BAD_REQUEST);
         }
 
-        const managedStoreIds = await getStoreAndBranchIds(userStoreId);
-        if (!managedStoreIds || !managedStoreIds.includes(id)) {
+        const managedStoreIds = await getStoreAndBranchIds(storeId);
+        if (!managedStoreIds || !managedStoreIds.includes(targetStoreId)) {
             return handleError2(res, "Store not found or you do not have permission to delete it.", StatusCodes.FORBIDDEN);
         }
 
         const hasBranches = await db.query.stores.findFirst({
-            where: eq(stores.storeParentId, id),
+            where: eq(stores.storeParentId, targetStoreId),
         });
 
         if (hasBranches) {
             return handleError2(res, "Cannot delete a store that has active branches.", StatusCodes.BAD_REQUEST);
         }
 
-        const [deletedStore] = await db.delete(stores).where(eq(stores.id, id)).returning();
+        const [deletedStore] = await db.delete(stores).where(eq(stores.id, targetStoreId)).returning();
 
         if (!deletedStore) {
             return handleError2(res, "Failed to delete store. It might have been already deleted.", StatusCodes.NOT_FOUND);
@@ -318,7 +318,7 @@ export const deleteStore = async (req: CustomRequest, res: Response) => {
 
         await logActivity({
             userId: currentUser.id,
-            storeId: userStoreId,
+            storeId: storeId,
             action: "STORE_DELETED",
             entityId: deletedStore.id,
             entityType: "store",
