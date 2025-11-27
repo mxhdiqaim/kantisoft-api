@@ -4,9 +4,10 @@ import db from "../db";
 import { activityLog } from "../schema/activity-log-schema";
 import { users } from "../schema/users-schema";
 import { stores } from "../schema/stores-schema";
-import { handleError } from "../service/error-handling";
-import { StatusCodeEnum, UserRoleEnum } from "../types/enums";
+import { handleError2 } from "../service/error-handling";
+import { UserRoleEnum } from "../types/enums";
 import { and, desc, eq, ne, sql, SQLWrapper } from "drizzle-orm";
+import { StatusCodes } from "http-status-codes";
 
 export const getActivities = async (req: Request, res: Response) => {
     try {
@@ -19,10 +20,10 @@ export const getActivities = async (req: Request, res: Response) => {
         const role = currentUser?.role;
 
         if (!storeId || !role) {
-            return handleError(
+            return handleError2(
                 res,
                 "Unauthorized: User or store information missing.",
-                StatusCodeEnum.UNAUTHORIZED,
+                StatusCodes.UNAUTHORIZED,
             );
         }
 
@@ -50,17 +51,17 @@ export const getActivities = async (req: Request, res: Response) => {
             );
         } else {
             // Any other role is forbidden from viewing activity logs.
-            return handleError(
+            return handleError2(
                 res,
                 "Forbidden: You do not have permission to view activity logs.",
-                StatusCodeEnum.FORBIDDEN,
+                StatusCodes.FORBIDDEN,
             );
         }
 
         // Build the Drizzle query dynamically based on flags
         let queryBuilder: any = db
             .select({
-                activityLog, // Select all columns from activityLog
+                activityLog, // Select all columns from the activityLog
                 store: {
                     // Always include store details if storeId is present
                     name: stores.name,
@@ -75,7 +76,7 @@ export const getActivities = async (req: Request, res: Response) => {
                     : {},
             })
             .from(activityLog)
-            .leftJoin(stores, eq(activityLog.storeId, stores.id)); // Always join stores for store name
+            .leftJoin(stores, eq(activityLog.storeId, stores.id));
 
         // Conditionally apply leftJoin for users based on the flag
         if (includeUsersTable || selectUsersColumns) {
@@ -104,7 +105,7 @@ export const getActivities = async (req: Request, res: Response) => {
             .from(activityLog);
 
         if (includeUsersTable || selectUsersColumns) {
-            // Apply same conditional join for count
+            // Apply the same conditional join for count
             countQueryBuilder = countQueryBuilder.leftJoin(
                 users,
                 eq(activityLog.userId, users.id),
@@ -117,18 +118,19 @@ export const getActivities = async (req: Request, res: Response) => {
         const totalCountResult = await finalCountQuery;
         const totalCount = totalCountResult[0]?.count || 0;
 
-        res.status(StatusCodeEnum.OK).json({
+        res.status(StatusCodes.OK).json({
             data: activities,
             totalCount: totalCount,
             limit: limit,
             offset: offset,
         });
     } catch (error) {
-        console.error("Failed to fetch activities:", error);
-        handleError(
+        // console.error("Failed to fetch activities:", error);
+        handleError2(
             res,
             "Failed to fetch activities due to an internal server error.",
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
         );
     }
 };

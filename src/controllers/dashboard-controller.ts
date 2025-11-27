@@ -3,7 +3,6 @@ import db from "../db";
 import { and, count, desc, eq, gte, lt, max, min, sql, sum, lte, SQL, inArray } from "drizzle-orm";
 import { orderItems, orders } from "../schema/orders-schema";
 import { handleError2 } from "../service/error-handling";
-import { StatusCodeEnum } from "../types/enums";
 import { OrderBy } from "../types";
 import { menuItems } from "../schema/menu-items-schema";
 import moment from "moment-timezone";
@@ -154,10 +153,6 @@ export const getTopSells = async (req: CustomRequest, res: Response) => {
 
         res.status(StatusCodes.OK).json(topSells);
     } catch (error) {
-        // console.error(
-        //     `Error fetching top products for period ${period}:`,
-        //     error,
-        // );
         return handleError2(
             res,
             `Failed to retrieve top products`,
@@ -218,7 +213,7 @@ export const getInventorySummary = async (
                 ),
             );
 
-        res.status(StatusCodeEnum.OK).json({
+        res.status(StatusCodes.OK).json({
             totalLowStockItems: lowStockItems.length,
             totalOutOfStockItems: outOfStockItems.length,
             lowStockDetails: lowStockItems,

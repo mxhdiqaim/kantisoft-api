@@ -6,18 +6,15 @@ import db from "../db";
 import { menuItems } from "../schema/menu-items-schema";
 import { orderItems, orders } from "../schema/orders-schema";
 import { users } from "../schema/users-schema";
-import {
-    OrderPaymentMethodEnum,
-    OrderStatusEnum,
-    StatusCodeEnum,
-} from "../types/enums";
-import { handleError, handleError2 } from "../service/error-handling";
+import { OrderPaymentMethodEnum, OrderStatusEnum, } from "../types/enums";
+import { handleError2 } from "../service/error-handling";
 import { generateOrderReference } from "../utils";
 import { logActivity } from "../service/activity-logger";
 import { CustomRequest } from "../types/express";
 import { decrementStockForOrder } from "./inventory-controller";
 import { StatusCodes } from "http-status-codes";
 import { validateStoreAndExtractDates } from "../utils/validate-store-dates";
+import { InsufficientStockError } from "../errors";
 
 export const getAllOrders = async (req: CustomRequest, res: Response) => {
     try {
@@ -39,13 +36,14 @@ export const getAllOrders = async (req: CustomRequest, res: Response) => {
                 },
             },
         });
-        res.status(StatusCodeEnum.OK).json(allOrders);
+        res.status(StatusCodes.OK).json(allOrders);
     } catch (error) {
-        console.error(error);
-        handleError(
+        // console.error(error);
+        handleError2(
             res,
             "Problem loading orders, please try again.",
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
         );
     }
 };
@@ -166,7 +164,7 @@ export const getOrdersByPeriod = async (req: CustomRequest, res: Response) => {
 
         return res.status(StatusCodes.OK).json(response);
     } catch (error) {
-        console.error(error);
+        // console.error(error);
         return handleError2(
             res,
             "Problem loading orders for the specified period, please try again.",
@@ -184,10 +182,10 @@ export const getOrderById = async (req: CustomRequest, res: Response) => {
         // const isManager = req.user?.data.role === UserRoleEnum.MANAGER;
 
         if (!userStoreId) {
-            return handleError(
+            return handleError2(
                 res,
                 "User not associated with a store.",
-                StatusCodeEnum.UNAUTHORIZED,
+                StatusCodes.UNAUTHORIZED,
             );
         }
 
@@ -220,19 +218,20 @@ export const getOrderById = async (req: CustomRequest, res: Response) => {
         });
 
         if (!order) {
-            return handleError(
+            return handleError2(
                 res,
                 "The order is not found",
-                StatusCodeEnum.NOT_FOUND,
+                StatusCodes.NOT_FOUND,
             );
         }
-        res.status(StatusCodeEnum.OK).json(order);
+        res.status(StatusCodes.OK).json(order);
     } catch (error) {
-        console.error(error);
-        return handleError(
+        // console.error(error);
+        return handleError2(
             res,
             "Problem loading order, please try again.",
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
         );
     }
 };
@@ -359,7 +358,7 @@ export const createOrder = async (req: CustomRequest, res: Response) => {
             }));
             await tx.insert(orderItems).values(newOrderItemsData);
 
-            // 3. CRITICAL: DECREMENT STOCK
+            // DECREMENT STOCK
             // This must run within the transaction (tx) so that if stock is not enough,
             // the entire order (step 1 & 2) is automatically rolled back.
             const itemsForStockDecrement = items.map(item => ({
@@ -412,7 +411,15 @@ export const createOrder = async (req: CustomRequest, res: Response) => {
 
         res.status(StatusCodes.CREATED).json(newOrder);
     } catch (error) {
-        // console.error(error);
+        if (error instanceof InsufficientStockError) {
+            return handleError2(
+                res,
+                error.message,
+                StatusCodes.CONFLICT, // Use 409 Conflict for this specific error
+                error,
+            );
+        }
+
         return handleError2(
             res,
             "Problem creating order, please try again",
@@ -436,26 +443,26 @@ export const updateOrderStatus = async (req: CustomRequest, res: Response) => {
         // const isManager = req.user?.data.role === UserRoleEnum.MANAGER;
 
         if (!userStoreId) {
-            return handleError(
+            return handleError2(
                 res,
                 "User not associated with a store.",
-                StatusCodeEnum.UNAUTHORIZED,
+                StatusCodes.UNAUTHORIZED,
             );
         }
 
         if (!orderItems) {
-            return handleError(
+            return handleError2(
                 res,
                 "Order status is required.",
-                StatusCodeEnum.BAD_REQUEST,
+                StatusCodes.BAD_REQUEST,
             );
         }
 
         if (!orderStatus) {
-            return handleError(
+            return handleError2(
                 res,
                 "Order status is required.",
-                StatusCodeEnum.BAD_REQUEST,
+                StatusCodes.BAD_REQUEST,
             );
         }
 
@@ -473,10 +480,10 @@ export const updateOrderStatus = async (req: CustomRequest, res: Response) => {
             .returning();
 
         if (updatedOrder.length === 0) {
-            return handleError(
+            return handleError2(
                 res,
                 "The order is not found or or it cannot be updated because it is completed or cancelled.",
-                StatusCodeEnum.NOT_FOUND,
+                StatusCodes.NOT_FOUND,
             );
         }
 
@@ -490,13 +497,14 @@ export const updateOrderStatus = async (req: CustomRequest, res: Response) => {
             details: `Order status updated to "${orderStatus}" by ${req.user?.data.firstName} ${req.user?.data.lastName}.`,
         });
 
-        res.status(StatusCodeEnum.OK).json(updatedOrder[0]);
+        res.status(StatusCodes.OK).json(updatedOrder[0]);
     } catch (error) {
-        console.error(error);
-        handleError(
+        // console.error(error);
+        handleError2(
             res,
             "Problem updating order, please try again.",
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
         );
     }
 };
@@ -508,10 +516,10 @@ export const deleteOrder = async (req: CustomRequest, res: Response) => {
         const userStoreId = req.userStoreId;
 
         if (!userStoreId) {
-            return handleError(
+            return handleError2(
                 res,
                 "User not associated with a store.",
-                StatusCodeEnum.UNAUTHORIZED,
+                StatusCodes.UNAUTHORIZED,
             );
         }
 
@@ -529,10 +537,10 @@ export const deleteOrder = async (req: CustomRequest, res: Response) => {
             .returning();
 
         if (deletedOrder.length === 0) {
-            return handleError(
+            return handleError2(
                 res,
                 "The order is not found or it cannot be deleted because it is already completed or cancelled.",
-                StatusCodeEnum.NOT_FOUND,
+                StatusCodes.NOT_FOUND,
             );
         }
 
@@ -546,15 +554,16 @@ export const deleteOrder = async (req: CustomRequest, res: Response) => {
             details: `Order with reference ${deletedOrder[0].reference} deleted by ${req.user?.data.firstName} ${req.user?.data.lastName}.`,
         });
 
-        res.status(StatusCodeEnum.OK).json({
+        res.status(StatusCodes.OK).json({
             message: "Order deleted successfully",
         });
     } catch (error) {
-        console.error(error);
-        return handleError(
+        // console.error(error);
+        return handleError2(
             res,
             "Problem deleting order, please try again.",
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
         );
     }
 };
@@ -582,10 +591,10 @@ export const getMostOrderedItem = async (req: CustomRequest, res: Response) => {
             .limit(1);
 
         if (result.length === 0) {
-            return handleError(
+            return handleError2(
                 res,
                 "No orders found.",
-                StatusCodeEnum.NOT_FOUND,
+                StatusCodes.NOT_FOUND,
             );
         }
 
@@ -595,16 +604,17 @@ export const getMostOrderedItem = async (req: CustomRequest, res: Response) => {
                 eq(menuItems.id, result[0].menuItemId),
         });
 
-        res.status(StatusCodeEnum.OK).json({
+        res.status(StatusCodes.OK).json({
             menuItem,
             totalQuantity: result[0].totalQuantity,
         });
     } catch (error) {
-        console.error(error);
-        handleError(
+        // console.error(error);
+        handleError2(
             res,
             "Problem fetching most ordered item, please try again.",
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
         );
     }
 };
@@ -625,10 +635,10 @@ export const getOrderByReference = async (
         // const isManager = req.user?.data.role === UserRoleEnum.MANAGER;
 
         if (!userStoreId) {
-            return handleError(
+            return handleError2(
                 res,
                 "User not associated with a store.",
-                StatusCodeEnum.UNAUTHORIZED,
+                StatusCodes.UNAUTHORIZED,
             );
         }
 
@@ -660,19 +670,20 @@ export const getOrderByReference = async (
         });
 
         if (!order) {
-            return handleError(
+            return handleError2(
                 res,
                 "The order is not found",
-                StatusCodeEnum.NOT_FOUND,
+                StatusCodes.NOT_FOUND,
             );
         }
-        res.status(StatusCodeEnum.OK).json(order);
+        res.status(StatusCodes.OK).json(order);
     } catch (error) {
-        console.error(error);
-        return handleError(
+        // console.error(error);
+        return handleError2(
             res,
             "Problem loading order, please try again.",
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
         );
     }
 };

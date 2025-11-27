@@ -6,9 +6,9 @@ import passport from "passport";
 import { generateToken } from "../config/jwt-config";
 import db from "../db";
 import { InsertUserSchemaT, users } from "../schema/users-schema";
-import { handleError, handleError2 } from "../service/error-handling";
+import { handleError2 } from "../service/error-handling";
 import { passwordHashService } from "../service/password-hash-service";
-import { StatusCodeEnum, UserRoleEnum, UserStatusEnum } from "../types/enums";
+import { UserRoleEnum, UserStatusEnum } from "../types/enums";
 import { stores } from "../schema/stores-schema";
 import { CustomRequest } from "../types/express";
 import { logActivity } from "../service/activity-logger";
@@ -33,14 +33,14 @@ export const registerManagerAndStore = async (req: Request, res: Response) => {
 
         // Validate input
         if (!email || !password || !firstName || !storeName || !storeType) {
-            return handleError(
+            return handleError2(
                 res,
                 "First name, email, password, store name, and store type are required.",
-                StatusCodeEnum.BAD_REQUEST,
+                StatusCodes.BAD_REQUEST,
             );
         }
 
-        // Normalize phone input: Convert empty string or undefined to null
+        // Normalise phone input: Convert empty string or undefined to null
         // This ensures consistent storage (NULL for truly optional/blank) and
         // allows correct SQL NULL handling in uniqueness checks.
         const normalizedPhone =
@@ -66,26 +66,26 @@ export const registerManagerAndStore = async (req: Request, res: Response) => {
         if (existingUser) {
             // Provide more specific feedback to the user
             if (existingUser.email === email) {
-                return handleError(
+                return handleError2(
                     res,
                     "A user with this email already exists.",
-                    StatusCodeEnum.CONFLICT,
+                    StatusCodes.CONFLICT,
                 );
             } else if (
                 normalizedPhone !== null &&
                 existingUser.phone === normalizedPhone
             ) {
-                return handleError(
+                return handleError2(
                     res,
                     "A user with this phone number already exists.",
-                    StatusCodeEnum.CONFLICT,
+                    StatusCodes.CONFLICT,
                 );
             } else {
                 // Fallback for general case or if both match (less likely with specific checks above)
-                return handleError(
+                return handleError2(
                     res,
                     "A user with this email or phone number already exists.",
-                    StatusCodeEnum.CONFLICT,
+                    StatusCodes.CONFLICT,
                 );
             }
         }
@@ -134,14 +134,14 @@ export const registerManagerAndStore = async (req: Request, res: Response) => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { password: _, ...userWithoutPassword } = user;
 
-        res.status(StatusCodeEnum.CREATED).json({
+        res.status(StatusCodes.CREATED).json({
             user: userWithoutPassword,
             token,
         });
     } catch (error: any) {
-        console.error("Registration Error:", error);
+        // console.error("Registration Error:", error);
         // CRITICAL FIX: Add more specific error handling for unique constraints.
-        // If the database constraint (e.g., users_storeId_phone_unique) is violated,
+        // If the database constraint (e.g. users_storeId_phone_unique) is violated,
         // Drizzle might throw an error with a specific code/constraint name.
         if (
             error.cause &&
@@ -152,30 +152,34 @@ export const registerManagerAndStore = async (req: Request, res: Response) => {
             if ("constraint" in error.cause) {
                 switch (error.cause.constraint) {
                     case "users_email_unique": // If you have a global unique email constraint
-                        return handleError(
+                        return handleError2(
                             res,
                             "A user with this email already exists globally.",
-                            StatusCodeEnum.CONFLICT,
+                            StatusCodes.CONFLICT,
+                            error instanceof Error ? error : undefined,
                         );
                     case "users_storeId_email_unique": // Your storeId, email unique constraint
-                        return handleError(
+                        return handleError2(
                             res,
                             "A user with this email already exists within a store.",
-                            StatusCodeEnum.CONFLICT,
+                            StatusCodes.CONFLICT,
+                            error instanceof Error ? error : undefined,
                         );
                     case "users_storeId_phone_unique": // Your storeId, phone unique constraint
-                        return handleError(
+                        return handleError2(
                             res,
                             "A user with this phone number already exists within a store.",
-                            StatusCodeEnum.CONFLICT,
+                            StatusCodes.CONFLICT,
+                            error instanceof Error ? error : undefined,
                         );
                 }
             }
         }
-        handleError(
+        handleError2(
             res,
             "Registration failed. Please try again.",
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
         );
     }
 };
@@ -278,10 +282,10 @@ export const getUserById = async (req: CustomRequest, res: Response) => {
 
         // // Check if a user is authenticated
         // if (!currentUser || !userStoreId) {
-        //     return handleError(
+        //     return handleError2(
         //         res,
         //         "Authentication required.",
-        //         StatusCodeEnum.UNAUTHORIZED,
+        //         StatusCodes.UNAUTHORIZED,
         //     );
         // }
 
@@ -338,10 +342,10 @@ export const getUserById = async (req: CustomRequest, res: Response) => {
 
         // Deny access if none of the conditions are met
         if (!isManager && !isOwnProfile && !isAdminInSameStore) {
-            return handleError(
+            return handleError2(
                 res,
                 "You do not have permission to view this profile.",
-                StatusCodeEnum.FORBIDDEN,
+                StatusCodes.FORBIDDEN,
             );
         }
 
@@ -358,7 +362,7 @@ export const getUserById = async (req: CustomRequest, res: Response) => {
         // Return user data without the password
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { password, ...userWithoutPassword } = targetUser;
-        res.status(StatusCodeEnum.OK).json(userWithoutPassword);
+        res.status(StatusCodes.OK).json(userWithoutPassword);
     } catch (error) {
         handleError2(
             res,
@@ -381,19 +385,19 @@ export const deleteUser = async (req: CustomRequest, res: Response) => {
 
         // Check for authentication
         if (!currentUser) {
-            return handleError(
+            return handleError2(
                 res,
                 "Authentication required.",
-                StatusCodeEnum.UNAUTHORIZED,
+                StatusCodes.UNAUTHORIZED,
             );
         }
 
         // Prevent users from deleting themselves
         if (currentUser.id === targetUserId) {
-            return handleError(
+            return handleError2(
                 res,
                 "You cannot perform this action",
-                StatusCodeEnum.FORBIDDEN,
+                StatusCodes.FORBIDDEN,
             );
         }
 
@@ -401,19 +405,19 @@ export const deleteUser = async (req: CustomRequest, res: Response) => {
         const targetUser = await db.query.users.findFirst({
             where: and(
                 eq(users.id, targetUserId),
-                eq(users.storeId, String(currentUser.storeId)), // <-- CRITICAL FIX: Add multi-tenancy filter
+                eq(users.storeId, String(currentUser.storeId)),
             ),
         });
 
         if (!targetUser) {
-            return handleError(
+            return handleError2(
                 res,
                 "User not found.",
-                StatusCodeEnum.NOT_FOUND,
+                StatusCodes.NOT_FOUND,
             );
         }
 
-        // Authorization Logic: Who can delete whom?
+        // Authorisation Logic: Who can delete whom?
         const isManager = currentUser.role === UserRoleEnum.MANAGER;
         const isAdmin = currentUser.role === UserRoleEnum.ADMIN;
 
@@ -427,10 +431,10 @@ export const deleteUser = async (req: CustomRequest, res: Response) => {
                 currentUser.storeId === targetUser.storeId);
 
         if (!canDelete) {
-            return handleError(
+            return handleError2(
                 res,
                 "You do not have permission to delete this user.",
-                StatusCodeEnum.FORBIDDEN,
+                StatusCodes.FORBIDDEN,
             );
         }
 
@@ -455,15 +459,16 @@ export const deleteUser = async (req: CustomRequest, res: Response) => {
             details: `User ${targetUser.firstName} ${targetUser.lastName} deleted by ${currentUser.firstName} ${currentUser.lastName}.`,
         });
 
-        res.status(StatusCodeEnum.OK).json({
+        res.status(StatusCodes.OK).json({
             message: "User account has been successfully deleted.",
         });
     } catch (error) {
-        console.error("Error deleting user:", error);
-        handleError(
+        // console.error("Error deleting user:", error);
+        handleError2(
             res,
             "Failed to delete user.",
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
         );
     }
 };
@@ -475,7 +480,7 @@ export const createUser = async (req: CustomRequest, res: Response) => {
 
         // Check if the user is authenticated
         if (!currentUser) {
-            return handleError(
+            return handleError2(
                 res,
                 "User not authenticated",
                 StatusCodes.FORBIDDEN,
@@ -485,10 +490,10 @@ export const createUser = async (req: CustomRequest, res: Response) => {
         // Get the storeId from the current user
         const storeId = currentUser.storeId;
         if (!storeId) {
-            return handleError(
+            return handleError2(
                 res,
                 "User does not belong to a store.",
-                StatusCodeEnum.FORBIDDEN,
+                StatusCodes.FORBIDDEN,
             );
         }
 
@@ -505,10 +510,10 @@ export const createUser = async (req: CustomRequest, res: Response) => {
             .limit(1);
 
         if (existingUserByEmail.length > 0) {
-            return handleError(
+            return handleError2(
                 res,
                 "A user with this email already exists in this store.",
-                StatusCodeEnum.CONFLICT,
+                StatusCodes.CONFLICT,
             );
         }
 
@@ -535,10 +540,10 @@ export const createUser = async (req: CustomRequest, res: Response) => {
         const canCreateRoles = allowedCreations[currentRole] || [];
 
         if (!canCreateRoles.includes(targetRole)) {
-            return handleError(
+            return handleError2(
                 res,
                 "You don't have permission to create this user type.",
-                StatusCodeEnum.FORBIDDEN,
+                StatusCodes.FORBIDDEN,
             );
         }
 
@@ -582,32 +587,33 @@ export const createUser = async (req: CustomRequest, res: Response) => {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { password, ...userWithoutPassword } = newUser;
 
-        res.status(StatusCodeEnum.CREATED).json(userWithoutPassword);
+        res.status(StatusCodes.CREATED).json(userWithoutPassword);
     } catch (error: any) {
-        console.error(error);
+        // console.error(error);
         // *** CRITICAL CHANGE 4: More specific error handling for unique constraints ***
         if (error.cause && error.cause.code === "23505") {
             // PostgreSQL unique violation error code
             if (error.cause.constraint === "users_email_unique") {
-                return handleError(
+                return handleError2(
                     res,
                     "A user with this email already exists.",
-                    StatusCodeEnum.CONFLICT,
+                    StatusCodes.CONFLICT,
                 );
             }
             if (error.cause.constraint === "users_storeId_phone_unique") {
                 // Your new constraint name
-                return handleError(
+                return handleError2(
                     res,
                     "A user with this phone number already exists in this store.",
-                    StatusCodeEnum.CONFLICT,
+                    StatusCodes.CONFLICT,
                 );
             }
         }
-        handleError(
+        handleError2(
             res,
             "Problem creating user, please try again",
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
         );
     }
 };
@@ -701,10 +707,10 @@ export const updateUser = async (req: CustomRequest, res: Response) => {
         }
 
         if (!canUpdate) {
-            return handleError(
+            return handleError2(
                 res,
                 "You do not have permission to update this user.",
-                StatusCodeEnum.FORBIDDEN,
+                StatusCodes.FORBIDDEN,
             );
         }
 
@@ -718,10 +724,10 @@ export const updateUser = async (req: CustomRequest, res: Response) => {
 
         // Perform the update
         if (Object.keys(updateData).length === 0) {
-            return handleError(
+            return handleError2(
                 res,
                 "No valid fields provided for update.",
-                StatusCodeEnum.BAD_REQUEST,
+                StatusCodes.BAD_REQUEST,
             );
         }
 
@@ -750,13 +756,14 @@ export const updateUser = async (req: CustomRequest, res: Response) => {
         // Return the updated user data (without password)
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { password, ...userWithoutPassword } = updatedUser;
-        res.status(StatusCodeEnum.OK).json(userWithoutPassword);
+        res.status(StatusCodes.OK).json(userWithoutPassword);
     } catch (error) {
-        console.error("Error updating user:", error);
-        handleError(
+        // console.error("Error updating user:", error);
+        handleError2(
             res,
             "Failed to update user.",
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
         );
     }
 };
@@ -906,33 +913,33 @@ export const updatePassword = async (req: CustomRequest, res: Response) => {
 
         // 1. Basic validation
         if (!currentUser) {
-            return handleError(
+            return handleError2(
                 res,
                 "Authentication required.",
-                StatusCodeEnum.UNAUTHORIZED,
+                StatusCodes.UNAUTHORIZED,
             );
         }
         if (!oldPassword || !newPassword) {
-            return handleError(
+            return handleError2(
                 res,
                 "Old password and new password are required.",
-                StatusCodeEnum.BAD_REQUEST,
+                StatusCodes.BAD_REQUEST,
             );
         }
 
         if (oldPassword === newPassword) {
-            return handleError(
+            return handleError2(
                 res,
                 "Old password and new password must be different.",
-                StatusCodeEnum.BAD_REQUEST,
+                StatusCodes.BAD_REQUEST,
             );
         }
 
         if (newPassword.length < 6) {
-            return handleError(
+            return handleError2(
                 res,
                 "New password must be at least 6 characters long.",
-                StatusCodeEnum.BAD_REQUEST,
+                StatusCodes.BAD_REQUEST,
             );
         }
 
@@ -943,10 +950,10 @@ export const updatePassword = async (req: CustomRequest, res: Response) => {
         });
 
         if (!userRecord) {
-            return handleError(
+            return handleError2(
                 res,
                 "User not found.",
-                StatusCodeEnum.NOT_FOUND,
+                StatusCodes.NOT_FOUND,
             );
         }
 
@@ -956,10 +963,10 @@ export const updatePassword = async (req: CustomRequest, res: Response) => {
             userRecord.password,
         );
         if (!isMatch) {
-            return handleError(
+            return handleError2(
                 res,
                 "Incorrect old password.",
-                StatusCodeEnum.FORBIDDEN,
+                StatusCodes.FORBIDDEN,
             );
         }
 
@@ -980,15 +987,16 @@ export const updatePassword = async (req: CustomRequest, res: Response) => {
             details: `Password changed by ${currentUser.firstName} ${currentUser.lastName}.`,
         });
 
-        res.status(StatusCodeEnum.OK).json({
+        res.status(StatusCodes.OK).json({
             message: "Password updated successfully.",
         });
     } catch (error) {
-        console.error("Error updating password:", error);
-        handleError(
+        // console.error("Error updating password:", error);
+        handleError2(
             res,
             "Failed to update password.",
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
         );
     }
 };
@@ -1006,18 +1014,19 @@ export const loginUser = async (
             info: { message: string },
         ) {
             if (error) {
-                return handleError(
+                return handleError2(
                     res,
-                    error instanceof Error ? error.message : "Server error",
-                    StatusCodeEnum.INTERNAL_SERVER_ERROR,
+                    "Server error",
+                    StatusCodes.INTERNAL_SERVER_ERROR,
+                    error,
                 );
             }
 
             if (!user) {
-                return handleError(
+                return handleError2(
                     res,
                     info.message || "Authentication failed",
-                    StatusCodeEnum.UNAUTHORIZED,
+                    StatusCodes.UNAUTHORIZED,
                 );
             }
 
@@ -1030,20 +1039,20 @@ export const loginUser = async (
             });
 
             if (!data) {
-                return handleError(
+                return handleError2(
                     res,
                     "Incorrect email or password.",
-                    StatusCodeEnum.UNAUTHORIZED,
+                    StatusCodes.UNAUTHORIZED,
                 );
             }
 
             req.login(user, (loginError) => {
                 if (loginError) {
                     console.error("Login error:", loginError);
-                    return handleError(
+                    return handleError2(
                         res,
                         "Login failed, please try again.",
-                        StatusCodeEnum.INTERNAL_SERVER_ERROR,
+                        StatusCodes.INTERNAL_SERVER_ERROR,
                     );
                 }
 
@@ -1051,17 +1060,17 @@ export const loginUser = async (
                 const token = generateToken(user.data);
 
                 if (!token) {
-                    return handleError(
+                    return handleError2(
                         res,
                         "Token generation failed.",
-                        StatusCodeEnum.INTERNAL_SERVER_ERROR,
+                        StatusCodes.INTERNAL_SERVER_ERROR,
                     );
                 }
 
                 // eslint-disable-next-line @typescript-eslint/no-unused-vars
                 const { password, ...userWithoutPassword } = user.data;
                 return res
-                    .status(StatusCodeEnum.OK)
+                    .status(StatusCodes.OK)
                     .json({ token, user: userWithoutPassword });
             });
         },
@@ -1069,7 +1078,7 @@ export const loginUser = async (
 };
 
 export const logoutUser = async (req: Request, res: Response) => {
-    return res.status(StatusCodeEnum.OK).json({ message: "Logout successful" });
+    return res.status(StatusCodes.OK).json({ message: "Logout successful" });
 };
 
 export const getUserAccess = async (req: CustomRequest, res: Response) => {
@@ -1089,13 +1098,14 @@ export const getUserAccess = async (req: CustomRequest, res: Response) => {
             lastModified: user?.data.lastModified,
         };
 
-        res.status(StatusCodeEnum.OK).json(access);
+        res.status(StatusCodes.OK).json(access);
     } catch (error) {
-        console.error(error);
-        handleError(
+        // console.error(error);
+        handleError2(
             res,
             "Problem loading user access, please try again",
-            StatusCodeEnum.INTERNAL_SERVER_ERROR,
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined,
         );
     }
 };

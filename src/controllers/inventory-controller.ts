@@ -15,6 +15,7 @@ import { OrderItemStockUpdate } from "../types";
 import { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { lte } from "drizzle-orm/sql/expressions/conditions";
 import { validateStoreAndExtractDates } from "../utils/validate-store-dates";
+import { InsufficientStockError } from "../errors";
 
 /**
  * @desc    Get all inventory records for the user's store
@@ -523,7 +524,6 @@ export const decrementStockForOrder = async (
     tx: NodePgDatabase<any>
 ) => {
     try {
-
         if (!items || items.length === 0) {
             return; // No items to process
         }
@@ -559,7 +559,7 @@ export const decrementStockForOrder = async (
             }
             if (currentRecord.quantity < item.quantity) {
                 // Insufficient stock, throw an error and roll back the Order.
-                throw new Error(
+                throw new InsufficientStockError(
                     `Insufficient stock for item ID: ${item.menuItemId}. Current: ${currentRecord.quantity}, Ordered: ${item.quantity}.`,
                 );
             }

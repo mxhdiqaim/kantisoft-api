@@ -1,5 +1,5 @@
 import { NextFunction, Response } from "express";
-import { handleError } from "../service/error-handling";
+import { handleError2 } from "../service/error-handling";
 import { UserRoleEnum } from "../types/enums";
 import { CustomRequest } from "../types/express";
 import { StatusCodes } from "http-status-codes";
@@ -14,5 +14,5 @@ export const isManager = (
         return next();
     }
 
-    return handleError(res, "Access denied.", StatusCodes.FORBIDDEN);
+    return handleError2(res, "Access denied.", StatusCodes.FORBIDDEN);
 };
