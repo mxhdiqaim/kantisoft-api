@@ -16,6 +16,7 @@ import { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { lte } from "drizzle-orm/sql/expressions/conditions";
 import { validateStoreAndExtractDates } from "../utils/validate-store-dates";
 import { InsufficientStockError } from "../errors";
+import { InventoryTransactionTypeEnum } from "../types/enums";
 
 /**
  * @desc    Get all inventory records for the user's store
@@ -24,10 +25,11 @@ import { InsufficientStockError } from "../errors";
  */
 export const getAllInventory = async (req: CustomRequest, res: Response) => {
     try {
-        const currentUser = req.user?.data;
-        const storeId = currentUser?.storeId;
+        // const currentUser = req.user?.data;
+        // const storeId = currentUser?.storeId;
+        const storeIds = req.storeIds;
 
-        if (!storeId) {
+        if (!storeIds || storeIds.length === 0) {
             return handleError2(
                 res,
                 "You must be associated with a store to view inventory.",
@@ -36,7 +38,7 @@ export const getAllInventory = async (req: CustomRequest, res: Response) => {
         }
 
         const allInventory = await db.query.inventory.findMany({
-            where: eq(inventory.storeId, storeId),
+            where: inArray(inventory.storeId, storeIds),
             orderBy: [desc(inventory.lastModified)],
             with: {
                 menuItem: { columns: { name: true, itemCode: true } },
@@ -68,10 +70,12 @@ export const getTransactionsByMenuItem = async (
     res: Response,
 ) => {
     try {
-        const currentUser = req.user?.data;
-        const storeId = currentUser?.storeId;
+        // const currentUser = req.user?.data;
+        // const storeId = currentUser?.storeId;
+        const storeIds = req.storeIds;
 
-        if (!storeId) {
+
+        if (!storeIds || storeIds.length === 0) {
             return handleError2(
                 res,
                 "You must be associated with a store.",
@@ -85,7 +89,7 @@ export const getTransactionsByMenuItem = async (
         // Base condition: Filter by the item ID and the store ID
         let whereClause = and(
             eq(inventoryTransactions.menuItemId, menuItemId),
-            eq(inventoryTransactions.storeId, storeId),
+            inArray(inventoryTransactions.storeId, storeIds),
         );
 
         // Optional: Add date range filtering
@@ -252,7 +256,7 @@ export const getInventoryByMenuItem = async (
 
 /*
  * @desc Create an inventory record for a menu item
- * @route POST /api/v1/inventory/
+ * @route POST /api/v1/inventory/create
  * @access Private (Store-associated users only)
  */
 export const createInventoryRecord = async (
@@ -638,19 +642,13 @@ export const markAsDiscontinued = async (
             );
         }
 
-        // Authorisation check (You may need helper middleware for this in a real app)
-        // if (currentUser.role !== 'MANAGER' && currentUser.role !== 'ADMIN') {
-        //     return handleError2(res, "Only managers or admins can discontinue inventory.", StatusCodes.FORBIDDEN);
-        // }
-
         const { id: menuItemId } = req.params;
         const { id: userId} = currentUser;
-        // const userId = currentUser?.id;
 
         const [updatedInventory] = await db
             .update(inventory)
             .set({
-                status: "discontinued", // Set to the desired status
+                status: InventoryTransactionTypeEnum.DISCONTINUED, // Set to the desired status
                 lastModified: new Date(),
             })
             .where(
@@ -658,7 +656,7 @@ export const markAsDiscontinued = async (
                     eq(inventory.menuItemId, menuItemId),
                     eq(inventory.storeId, storeId),
                     // Prevent discontinuing if already discontinued
-                    ne(inventory.status, "discontinued"),
+                    ne(inventory.status, InventoryTransactionTypeEnum.DISCONTINUED),
                 ),
             )
             .returning();

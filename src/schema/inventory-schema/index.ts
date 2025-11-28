@@ -56,3 +56,4 @@ export const inventory = pgTable(
 
 export type InventorySchemaT = typeof inventory.$inferSelect;
 export type InsertInventorySchemaT = typeof inventory.$inferInsert;
+// export type InventoryStatusType = typeof inventory.$inferSelect.status;

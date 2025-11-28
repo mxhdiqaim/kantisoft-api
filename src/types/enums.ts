@@ -36,3 +36,11 @@ export enum StatusCodeEnum {
     INTERNAL_SERVER_ERROR = 500,
     UNPROCESSABLE_ENTITY = 422,
 }
+
+export enum InventoryTransactionTypeEnum {
+    IN_STOCK = "inStock",
+    LOW_STOCK = "lowStock",
+    OUT_OF_STOCK = "outOfStock",
+    // ADJUSTMENT = "adjustment",
+    DISCONTINUED = "discontinued",
+}

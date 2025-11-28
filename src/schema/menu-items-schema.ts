@@ -16,6 +16,7 @@ export const menuItems = pgTable(
         name: text("name").notNull(),
         description: text("description"),
         itemCode: text("itemCode"),
+        // sku: text("sku"),
         price: numeric("price", { precision: 10, scale: 2 }).notNull(),
         storeId: uuid("storeId").references(() => stores.id),
         // currentMenu: integer("currentMenu").notNull().default(0),
