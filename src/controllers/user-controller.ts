@@ -731,10 +731,14 @@ export const updateUser = async (req: CustomRequest, res: Response) => {
             );
         }
 
+        const { phone, ...rest } = updateData;
+
+        const phoneToUpdate = phone === "" ? null : phone;
+
         // Perform the update, ensuring the target is still in an accessible store
         const [updatedUser] = await db
             .update(users)
-            .set({ ...updateData, lastModified: new Date() })
+            .set({ phone: phoneToUpdate, ...updateData, lastModified: new Date() })
             .where(
                 and(
                     eq(users.id, targetUserId),
