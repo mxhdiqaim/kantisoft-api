@@ -3,12 +3,12 @@ import { and, desc, eq, gte, inArray, ne, sql, SQL } from "drizzle-orm";
 import { Response } from "express";
 import db from "../db";
 import { inventory } from "../schema/inventory-schema";
-import { handleError2} from "../service/error-handling";
+import { handleError2 } from "../service/error-handling";
 import { CustomRequest } from "../types/express";
 import { logActivity } from "../service/activity-logger";
 import { calculateInventoryStatus, getInventoryByMenuItemId } from "../helpers";
-import {StatusCodes} from "http-status-codes";
-import {inventoryTransactions} from "../schema/inventory-schema/inventory-transaction-schema";
+import { StatusCodes } from "http-status-codes";
+import { inventoryTransactions } from "../schema/inventory-schema/inventory-transaction-schema";
 import { getStockAdjustedAction } from "../utils/inventory-utils";
 import { menuItems } from "../schema/menu-items-schema";
 import { OrderItemStockUpdate } from "../types";
@@ -16,7 +16,11 @@ import { NodePgDatabase } from "drizzle-orm/node-postgres";
 import { lte } from "drizzle-orm/sql/expressions/conditions";
 import { validateStoreAndExtractDates } from "../utils/validate-store-dates";
 import { InsufficientStockError } from "../errors";
-import { InventoryTransactionTypeEnum } from "../types/enums";
+import {
+    INVENTORY_TRANSACTION_SUMMARY_TYPES,
+    InventoryTransactionSummaryTypeEnum,
+    InventoryTransactionTypeEnum,
+} from "../types/enums";
 
 /**
  * @desc    Get all inventory records for the user's store
@@ -137,7 +141,7 @@ export const getTransactionsByMenuItem = async (
  * @access  Private (Store-associated users only)
  * @query   ?timePeriod=week OR ?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
  */
-export const getHistoricalStockReport = async (
+export const getInventoryTransactions = async (
     req: CustomRequest,
     res: Response,
 ) => {
@@ -160,37 +164,48 @@ export const getHistoricalStockReport = async (
         }
 
         // Use SQL aggregation to sum the quantityChange grouped by transactionType
-        const report = await db
+        const transaction = await db
             .select({
+                id: inventoryTransactions.id,
+                storeId: inventoryTransactions.storeId,
                 transactionType: inventoryTransactions.transactionType,
+                performedBy: inventoryTransactions.performedBy,
                 // Sum the quantityChange and ensure it's returned as a numeric type (or string to be parsed later)
                 totalQuantityMoved: sql<string>`SUM(${inventoryTransactions.quantityChange})`.as('totalQuantityMoved'),
             })
             .from(inventoryTransactions)
             .where(whereClause)
-            .groupBy(inventoryTransactions.transactionType);
+            .groupBy(
+                inventoryTransactions.id,
+                inventoryTransactions.storeId,
+                inventoryTransactions.transactionType,
+                inventoryTransactions.performedBy
+            );
 
 
         // Format the results for a cleaner response object
-        const formattedReport = report.map(item => ({
+        const formattedTransaction = transaction.map(item => ({
+            id: item.id,
+            storeId: item.storeId,
             type: item.transactionType,
+            performedBy: item.performedBy,
             // Parse the sum string to a float/number
             totalChange: parseFloat(item.totalQuantityMoved || '0'),
 
             // Helpful label based on the transaction type
-            label: item.transactionType === 'sale' ? 'Total Units Sold (Decrease)' :
-                item.transactionType === 'adjustmentOut' ? 'Total Loss/Waste (Decrease)' :
-                    item.transactionType === 'purchaseReceive' ? 'Total Units Received (Increase)' :
-                        item.transactionType === 'adjustmentIn' ? 'Total Units Adjusted In (Increase)' :
+            label: item.transactionType === InventoryTransactionSummaryTypeEnum.SALE ? 'Total Units Sold (Decrease)' :
+                item.transactionType === InventoryTransactionSummaryTypeEnum.ADJUSTMENT_OUT ? 'Total Loss/Waste (Decrease)' :
+                    item.transactionType === InventoryTransactionSummaryTypeEnum.PURCHASE_RECEIVE ? 'Total Units Received (Increase)' :
+                        item.transactionType === InventoryTransactionSummaryTypeEnum.ADJUSTMENT_IN ? 'Total Units Adjusted In (Increase)' :
                             item.transactionType,
         }));
 
 
         res.status(StatusCodes.OK).json({
-            periodStart: finalStartDate ? finalStartDate.toISOString() : 'All Time',
-            periodEnd: finalEndDate ? finalEndDate.toISOString() : 'All Time',
-            summary: formattedReport,
-            period: periodUsed,
+            startDate: finalStartDate ? finalStartDate.toISOString() : 'All Time',
+            endDate: finalEndDate ? finalEndDate.toISOString() : 'All Time',
+            transactions: formattedTransaction,
+            timePeriod: periodUsed,
             storeQueryType
         });
 
@@ -361,6 +376,87 @@ export const createInventoryRecord = async (
     }
 };
 
+/**
+ * @description Update stock quantity or status for a specific menu item in the current store scope.
+ * @route PATCH /api/v1/inventory/:menuItemId
+ * @access Private (Admin/Manager)
+ */
+// export const updateInventory = async (req: CustomRequest, res: Response) => {
+//     try {
+//         const { menuItemId } = req.params;
+//         const { quantity, inventoryStatus, lastCountDate, transactionType, notes } = req.body as UpdateInventoryBody;
+//
+//         // const validated = await validateStoreAndExtractDates(req, res);
+//         // if (!validated) return;
+//
+//         const currentUser = req.user?.data;
+//         const storeId = currentUser?.storeId;
+//
+//         if (!storeId) {
+//             // Managers must use the ?targetStoreId=X parameter if they are updating a branch.
+//             console.log("Inventory updates must target a single store. Please use the targetStoreId query parameter.")
+//             return handleError2(
+//                 res,
+//                 "Store not found",
+//                 StatusCodes.BAD_REQUEST,
+//             );
+//         }
+//
+//         const updateData: Partial<typeof inventory.$inferInsert> = {
+//             lastModified: new Date(),
+//         };
+//
+//         if (quantity !== undefined) updateData.quantity = quantity;
+//         if (inventoryStatus) updateData.status = inventoryStatus;
+//         if (lastCountDate) updateData.lastCountDate = lastCountDate;
+//
+//         const updatedInventory = await db.transaction(async (tx) => {
+//             // Execute the update
+//             const [updated] = await db
+//                 .update(inventory)
+//                 .set(updateData)
+//                 .where(and(
+//                     eq(inventory.menuItemId, menuItemId),
+//                     eq(inventory.storeId, storeId)
+//                 ))
+//                 .returning();
+//
+//             // if (!updatedInventory) {
+//             //     return handleError2(
+//             //         res,
+//             //         "Inventory record not found for the specified item/store.",
+//             //         StatusCodes.NOT_FOUND,
+//             //     );
+//             // }
+//
+//             // Insert the Inventory Transaction record
+//             await tx
+//                 .insert(inventoryTransactions)
+//                 .values({
+//                     menuItemId,
+//                     storeId,
+//                     transactionType,
+//                     quantityChange: quantity,
+//                     resultingQuantity: newQuantity,
+//                     performedBy: userId,
+//                     notes: notes,
+//                     transactionDate: new Date(),
+//                 })
+//                 .returning({ id: inventoryTransactions.id });
+//         })
+//
+//
+//         res.status(StatusCodes.OK).json(updatedInventory);
+//     } catch (error) {
+//         return handleError2(
+//             res,
+//             "Failed to update inventory.",
+//             StatusCodes.INTERNAL_SERVER_ERROR,
+//             error instanceof Error ? error : undefined
+//         );
+//     }
+// };
+
 /*
     * @desc    Adjust stock level for a menu item (manual adjustment)
     * @route   PATCH /api/v1/inventory/adjust-stock/:menuItemId
@@ -406,14 +502,8 @@ export const adjustStock = async (req: CustomRequest, res: Response) => {
             );
         }
 
-        const validAdjustmentTypes = [
-            "adjustmentIn",
-            "adjustmentOut",
-            "purchaseReceive",
-        ];
-
         // Types allowed for manual change via API
-        if (!validAdjustmentTypes.includes(transactionType)) {
+        if (!INVENTORY_TRANSACTION_SUMMARY_TYPES.includes(transactionType)) {
             return handleError2(
                 res,
                 `Invalid transaction type for manual adjustment.`,
@@ -521,6 +611,7 @@ export const adjustStock = async (req: CustomRequest, res: Response) => {
  * @body    { orderId: string, items: OrderItemStockUpdate[], performedBy: string, storeId: string }
  */
 export const decrementStockForOrder = async (
+    reference: string,
     orderId: string,
     items: OrderItemStockUpdate[],
     performedBy: string,
@@ -607,7 +698,7 @@ export const decrementStockForOrder = async (
                 quantityChange: changeAmount,
                 resultingQuantity: newQuantity,
                 performedBy: performedBy,
-                notes: `Sale via Order ID: ${orderId}`,
+                notes: `Sale via Order Reference: ${reference}`,
                 sourceDocumentId: orderId,
                 transactionDate: new Date(),
             });

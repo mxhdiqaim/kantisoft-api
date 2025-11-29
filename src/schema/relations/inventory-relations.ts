@@ -14,6 +14,10 @@ export const inventoryRelations = relations(inventory, ({ one }) => ({
         fields: [inventory.storeId],
         references: [stores.id],
     }),
+    // menuItem: one(menuItems, {
+    //     fields: [inventory.menuItemId],
+    //     references: [menuItems.id],
+    // }),
 }));
 
 export const inventoryTransactionsRelations = relations(

@@ -1,3 +1,8 @@
+import {
+    INVENTORY_TRANSACTION_SUMMARY_TYPES,
+    INVENTORY_TRANSACTION_TYPES,
+} from "./enums";
+
 export type Period = "today" | "week" | "month" | "all-time";
 
 export type TimePeriod = "today" | "week" | "month";
@@ -31,4 +36,11 @@ export interface ValidatedStoreDatesType {
     periodUsed: TimePeriod | "custom" | "all-time";
     storeQueryType: StoreQueryType;
     // queriedStoreIds: string[];
+}
+
+export interface UpdateInventoryBody {
+    quantity?: number;
+    inventoryStatus?: typeof INVENTORY_TRANSACTION_TYPES;
+    lastCountDate?: Date;
+    transactionType?: typeof INVENTORY_TRANSACTION_SUMMARY_TYPES;
 }

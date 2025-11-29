@@ -26,20 +26,20 @@ export const handleTargetStore = async (
         // This should ideally be caught by `checkUserHasStore` middleware first
         return handleError2(
             res,
-            "User not authenticated or associated with a store.",
+            "User not authenticated.",
             StatusCodes.UNAUTHORIZED,
         );
     }
 
     const targetStoreIdQuery = req.query.targetStoreId as string | undefined;
-    const userIsPrivileged = currentUser.role === UserRoleEnum.MANAGER;
+    const isManagerPrivileged = currentUser.role === UserRoleEnum.MANAGER;
 
     try {
-        if (userIsPrivileged && targetStoreIdQuery) {
+        if (isManagerPrivileged && targetStoreIdQuery) {
             // Privileged user provided specific store(s)
             req.storeIds = targetStoreIdQuery.split(",").map((id) => id.trim());
-        } else if (userIsPrivileged) {
-            // Privileged user, no specific target, so get all related stores
+        } else if (isManagerPrivileged) {
+            // Manager and no specific target, so get all related stores
             const allRelatedStoreIds = await getStoreAndBranchIds(
                 currentUser.storeId,
             );
@@ -47,14 +47,14 @@ export const handleTargetStore = async (
             if (!allRelatedStoreIds) {
                 return handleError2(
                     res,
-                    "Could not resolve stores for user.",
+                    "Could not resolve the request.",
                     StatusCodes.NOT_FOUND,
                 );
             }
 
             req.storeIds = allRelatedStoreIds;
         } else {
-            // Regular user scope is limited to their own store
+            // Regular user (ADMIN, USER and GUEST) scope is limited to their own store
             req.storeIds = [currentUser.storeId];
         }
 
@@ -62,7 +62,7 @@ export const handleTargetStore = async (
         if (!req.storeIds || req.storeIds.length === 0) {
             return handleError2(
                 res,
-                "Failed to determine target store for the request.",
+                "Failed to complete the request.",
                 StatusCodes.BAD_REQUEST,
             );
         }

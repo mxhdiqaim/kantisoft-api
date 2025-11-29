@@ -24,6 +24,7 @@ export const getAllMenuItems = async (req: CustomRequest, res: Response) => {
     try {
         const currentUser = req.user?.data;
         const storeId = currentUser?.storeId;
+        // const storeIds = req?.storeIds;
         const userRole = currentUser?.role;
         const { targetStoreId, page = '1', limit = '10' } = req.query;
 
@@ -71,7 +72,17 @@ export const getAllMenuItems = async (req: CustomRequest, res: Response) => {
             orderBy: [desc(menuItems.createdAt)],
             limit: limitNumber,
             offset: offset,
-            with: { store: { columns: { name: true } } },
+            with: {
+                store: { columns: { name: true } },
+                inventory: {
+                    columns: {
+                        quantity: true,
+                        status: true,
+                        minStockLevel: true,
+                        lastCountDate: true,
+                    }
+                }
+            },
         });
 
         res.status(StatusCodes.OK).json({

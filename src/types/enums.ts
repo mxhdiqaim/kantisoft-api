@@ -37,10 +37,27 @@ export enum StatusCodeEnum {
     UNPROCESSABLE_ENTITY = 422,
 }
 
-export enum InventoryTransactionTypeEnum {
-    IN_STOCK = "inStock",
-    LOW_STOCK = "lowStock",
-    OUT_OF_STOCK = "outOfStock",
-    // ADJUSTMENT = "adjustment",
-    DISCONTINUED = "discontinued",
-}
+export const InventoryTransactionTypeEnum = {
+    IN_STOCK: "inStock",
+    LOW_STOCK: "lowStock",
+    OUT_OF_STOCK: "outOfStock",
+    ADJUSTMENT: "adjustment",
+    DISCONTINUED: "discontinued",
+} as const;
+
+export const INVENTORY_TRANSACTION_TYPES = Object.values(
+    InventoryTransactionTypeEnum,
+);
+
+export const InventoryTransactionSummaryTypeEnum = {
+    SALE: "sale",
+    RETURN: "return",
+    WASTE: "waste",
+    ADJUSTMENT_IN: "adjustmentIn",
+    ADJUSTMENT_OUT: "adjustmentOut",
+    PURCHASE_RECEIVE: "purchaseReceive",
+} as const;
+
+export const INVENTORY_TRANSACTION_SUMMARY_TYPES = Object.values(
+    InventoryTransactionSummaryTypeEnum,
+);

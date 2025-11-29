@@ -15,6 +15,7 @@ export const inventoryStatusEnum = pgEnum("inventoryStatus", [
     "inStock", // Currently available to be sold
     "lowStock", // Below the minimum threshold
     "outOfStock", // Zero or less
+    "adjustment", // Manual adjustment made
     "discontinued", // No longer tracked
 ]);
 

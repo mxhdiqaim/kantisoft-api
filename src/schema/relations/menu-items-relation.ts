@@ -2,6 +2,7 @@ import { relations } from "drizzle-orm";
 import { menuItems } from "../menu-items-schema";
 import { orderItems } from "../orders-schema";
 import { stores } from "../stores-schema";
+import { inventory } from "../inventory-schema";
 
 export const menuItemsRelations = relations(menuItems, ({ one, many }) => ({
     orderItems: many(orderItems),
@@ -9,5 +10,10 @@ export const menuItemsRelations = relations(menuItems, ({ one, many }) => ({
     store: one(stores, {
         fields: [menuItems.storeId],
         references: [stores.id],
+    }),
+
+    inventory: one(inventory, {
+        fields: [menuItems.id],
+        references: [inventory.menuItemId],
     }),
 }));

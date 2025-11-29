@@ -1,7 +1,7 @@
-import {eq} from "drizzle-orm";
-import {UserRoleEnum} from "../types/enums";
+import { eq } from "drizzle-orm";
+import { UserRoleEnum } from "../types/enums";
 import db from "../db";
-import {stores} from "../schema/stores-schema";
+import { stores } from "../schema/stores-schema";
 
 /**
  * @desc Determines the array of store IDs a user is authorised to view data for.

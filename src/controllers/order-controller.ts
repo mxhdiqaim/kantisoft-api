@@ -384,6 +384,7 @@ export const createOrder = async (req: CustomRequest, res: Response) => {
             }));
 
             await decrementStockForOrder(
+                insertedOrder.reference ?? "",
                 insertedOrder.id,
                 itemsForStockDecrement,
                 sellerId,

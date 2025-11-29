@@ -51,7 +51,7 @@ export const getSalesSummary = async (req: CustomRequest, res: Response) => {
 
         const salesSummary = {
             storeQueryType,
-            period: periodUsed,
+            timePeriod: periodUsed,
             startDate: finalStartDate ? finalStartDate.toISOString() : 'All Time',
             endDate: finalEndDate ? finalEndDate.toISOString() : 'All Time',
             totalRevenue: parseFloat(summary.totalRevenue || "0").toFixed(2),
