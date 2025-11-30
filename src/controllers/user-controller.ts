@@ -731,7 +731,7 @@ export const updateUser = async (req: CustomRequest, res: Response) => {
             );
         }
 
-        const { phone, ...rest } = updateData;
+        const { phone } = updateData;
 
         const phoneToUpdate = phone === "" ? null : phone;
 
