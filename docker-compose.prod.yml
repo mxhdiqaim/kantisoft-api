@@ -104,20 +104,20 @@ services:
   #      landing:
   #          condition: service_started
 
-  fe:
-    image: ghcr.io/mxhdiqaim/kantisoft-fe:latest
-    container_name: kantisoft-fe-prod
-    environment:
-      NODE_ENV: production
-      PORT: 3000
-      API_DOMAIN: https://api.kantisoft.com # Update this for the frontend to point to the correct API domain
-
-  landing:
-    image: ghcr.io/mxhdiqaim/kantisoft-landing:latest
-    container_name: kantisoft-landing-prod
-    environment:
-      NODE_ENV: production
-      PORT: 4000 # The internal port Nginx will target
+  #  fe:
+  #    image: ghcr.io/mxhdiqaim/kantisoft-fe:latest
+  #    container_name: kantisoft-fe-prod
+  #    environment:
+  #      NODE_ENV: production
+  #      PORT: 3000
+  #      API_DOMAIN: https://api.kantisoft.com # Update this for the frontend to point to the correct API domain
+  #
+  #  landing:
+  #    image: ghcr.io/mxhdiqaim/kantisoft-landing:latest
+  #    container_name: kantisoft-landing-prod
+  #    environment:
+  #      NODE_ENV: production
+  #      PORT: 4000 # The internal port Nginx will target
 
   certbot:
     image: certbot/certbot
