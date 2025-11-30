@@ -97,8 +97,8 @@ services:
     depends_on:
       api:
         condition: service_healthy
-      certbot:
-        condition: service_healthy
+  #      certbot:
+  #        condition: service_healthy
   #      fe:
   #          condition: service_started
   #      landing:
