@@ -111,6 +111,12 @@ services:
       NODE_ENV: production
       PORT: 3000
       API_DOMAIN: https://api.kantisoft.com # Update this for the frontend to point to the correct API domain
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost/" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   #  landing:
   #    image: ghcr.io/mxhdiqaim/kantisoft-landing:latest
