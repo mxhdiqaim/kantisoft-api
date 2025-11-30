@@ -9,6 +9,8 @@ services:
     image: ghcr.io/mxhdiqaim/kantisoft-api:latest
     pull_policy: always
     container_name: kantisoft-api-prod
+    ports:
+      - 5473:5473
     environment:
       NODE_ENV: production
       PORT: ${PORT:-5473}
