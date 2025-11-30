@@ -92,8 +92,8 @@ services:
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./nginx/snippets:/etc/nginx/snippets:ro
-      - certbot_volumes:/etc/letsencrypt
-      - certbot_volumes_www:/var/www/certbot
+    #      - certbot_volumes:/etc/letsencrypt
+    #      - certbot_volumes_www:/var/www/certbot
     depends_on:
       api:
         condition: service_healthy
