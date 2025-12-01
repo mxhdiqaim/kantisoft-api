@@ -26,7 +26,9 @@ services:
       # Application Settings
       JWT_SECRET: ${JWT_SECRET}
       SESSION_SECRET: ${SESSION_SECRET}
-      CLIENT_DOMAIN: ${CLIENT_DOMAIN}
+      #      CLIENT_DOMAIN: ${CLIENT_DOMAIN}
+      APP_URL: ${APP_URL}
+      LANDING_PAGE: ${LANDING_PAGE:-https://kantisoft.com}
 
       # Redis Settings
       REDIS_PORT: 6379
@@ -83,57 +85,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-
-  #  nginx:
-  #    image: nginx:stable-alpine
-  #    container_name: kantisoft-nginx-prod
-  #    restart: always
-  #    ports:
-  #      - "80:80"
-  #      - "443:443"
-  #    volumes:
-  #      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-  #      - ./nginx/snippets:/etc/nginx/snippets:ro
-  #    #      - certbot_volumes:/etc/letsencrypt
-  #    #      - certbot_volumes_www:/var/www/certbot
-  #    depends_on:
-  #      api:
-  #        condition: service_healthy
-  #      #      certbot:
-  #      #        condition: service_healthy
-  #      fe:
-  #        condition: service_started
-  #      #  landing:
-  #      #        condition: service_started
-
-  #  fe:
-  #    image: ghcr.io/mxhdiqaim/kantisoft-fe:latest
-  #    container_name: kantisoft-fe-prod
-  #    environment:
-  #      NODE_ENV: production
-  #      PORT: 3000
-  #      API_DOMAIN: https://api.kantisoft.com # Update this for the frontend to point to the correct API domain
-  #    healthcheck:
-  #      test: [ "CMD", "curl", "-f", "http://localhost/" ]
-  #      interval: 10s
-  #      timeout: 5s
-  #      retries: 5
-  #      start_period: 10s
-
-  #  landing:
-  #    image: ghcr.io/mxhdiqaim/kantisoft-landing:latest
-  #    container_name: kantisoft-landing-prod
-  #    environment:
-  #      NODE_ENV: production
-  #      PORT: 4000 # The internal port Nginx will target
-
-#  certbot:
-#    image: certbot/certbot
-#    container_name: kantisoft-certbot-prod
-#    volumes:
-#      - certbot_volumes:/etc/letsencrypt
-#      - certbot_volumes_www:/var/www/certbot
-#    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $!; done;'"
 
 
 volumes:
