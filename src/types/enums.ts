@@ -5,12 +5,12 @@ export enum UserRoleEnum {
     GUEST = "guest",
 }
 
-export enum UserStatusEnum {
-    ACTIVE = "active",
-    INACTIVE = "inactive",
-    DELETED = "deleted",
-    BANNED = "banned",
-}
+export const UserStatusEnum = {
+    ACTIVE: "active",
+    INACTIVE: "inactive",
+    DELETED: "deleted",
+    BANNED: "banned",
+} as const;
 
 export enum OrderStatusEnum {
     CANCELED = "canceled",

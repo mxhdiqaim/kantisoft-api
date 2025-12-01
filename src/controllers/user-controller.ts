@@ -40,6 +40,8 @@ export const registerManagerAndStore = async (req: Request, res: Response) => {
             );
         }
 
+        const lowercasedEmail = email.toLowerCase();
+
         // Normalise phone input: Convert empty string or undefined to null
         // This ensures consistent storage (NULL for truly optional/blank) and
         // allows correct SQL NULL handling in uniqueness checks.
@@ -65,7 +67,7 @@ export const registerManagerAndStore = async (req: Request, res: Response) => {
 
         if (existingUser) {
             // Provide more specific feedback to the user
-            if (existingUser.email === email) {
+            if (existingUser.email.toLowerCase() === lowercasedEmail) {
                 return handleError2(
                     res,
                     "A user with this email already exists.",
@@ -105,7 +107,7 @@ export const registerManagerAndStore = async (req: Request, res: Response) => {
                 .values({
                     firstName,
                     lastName,
-                    email,
+                    email: lowercasedEmail,
                     password: hashedPassword,
                     phone: normalizedPhone,
                     role: UserRoleEnum.MANAGER, // Automatically a manager
@@ -497,14 +499,16 @@ export const createUser = async (req: CustomRequest, res: Response) => {
             );
         }
 
+        const lowercasedEmail = payload.email.toLowerCase();
+
         // Example of an updated manual check for email uniqueness
         const existingUserByEmail = await db
             .select()
             .from(users)
             .where(
                 and(
-                    eq(users.email, payload.email),
-                    eq(users.storeId, storeId), // Filter by current user's storeId
+                    eq(users.email, lowercasedEmail),
+                    eq(users.storeId, storeId),
                 ),
             )
             .limit(1);
@@ -560,7 +564,7 @@ export const createUser = async (req: CustomRequest, res: Response) => {
         const newUserToInsert: InsertUserSchemaT = {
             firstName: payload.firstName,
             lastName: payload.lastName,
-            email: payload.email,
+            email: lowercasedEmail,
             password: hashedPassword,
             phone: phoneToInsert, // Use the NULL-safe phone value
             role: targetRole, // Use the validated target role
@@ -731,14 +735,16 @@ export const updateUser = async (req: CustomRequest, res: Response) => {
             );
         }
 
-        const { phone } = updateData;
+        const { phone, email } = updateData;
+
+        const lowercasedEmail = email.toLowerCase();
 
         const phoneToUpdate = phone === "" ? null : phone;
 
         // Perform the update, ensuring the target is still in an accessible store
         const [updatedUser] = await db
             .update(users)
-            .set({ phone: phoneToUpdate, ...updateData, lastModified: new Date() })
+            .set({ phone: phoneToUpdate, email: lowercasedEmail, ...updateData, lastModified: new Date() })
             .where(
                 and(
                     eq(users.id, targetUserId),
@@ -1010,6 +1016,9 @@ export const loginUser = async (
     res: Response,
     next: NextFunction,
 ) => {
+    if (req.body.email) {
+        req.body.email = req.body.email.toLowerCase();
+    }
     passport.authenticate(
         "user",
         async function (
@@ -1039,6 +1048,8 @@ export const loginUser = async (
                 where: and(
                     eq(users.id, user.data.id),
                     ne(users.status, UserStatusEnum.DELETED),
+                    ne(users.status, UserStatusEnum.BANNED),
+                    ne(users.status, UserStatusEnum.INACTIVE),
                 ),
             });
 
