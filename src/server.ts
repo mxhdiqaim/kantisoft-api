@@ -36,10 +36,8 @@ const corsOptions = {
     credentials: true, // Allow cookies and authentication headers
 };
 
-app.use(cors(corsOptions));
-
 // CORS setup
-// app.use(cors({ credentials: true, origin: URL }));
+app.use(cors(corsOptions));
 
 /** Logging */
 app.use(morgan("dev"));
