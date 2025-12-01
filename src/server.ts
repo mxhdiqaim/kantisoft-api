@@ -29,8 +29,17 @@ const URL =
 /** Session */
 configureSession(app);
 
+const corsOptions = {
+    origin: URL, // FE origins
+    methods: ["GET", "POST", "PATCH", "DELETE"], // Allowed HTTP methods
+    allowedHeaders: ["Content-Type", "Authorization"], // Allowed request headers
+    credentials: true, // Allow cookies and authentication headers
+};
+
+app.use(cors(corsOptions));
+
 // CORS setup
-app.use(cors({ credentials: true, origin: URL }));
+// app.use(cors({ credentials: true, origin: URL }));
 
 /** Logging */
 app.use(morgan("dev"));
