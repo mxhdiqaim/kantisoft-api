@@ -1,4 +1,5 @@
-import "./config/sentry-config";
+import "./config/instrument";
+import * as Sentry from "@sentry/node";
 import cors from "cors";
 import express from "express";
 import http from "http";
@@ -8,13 +9,13 @@ import path from "path";
 import configureSession from "./config/session-config";
 import routes from "./routes";
 import { getEnvVariable } from "./utils";
-import { initializeSentry } from "./config/sentry-config";
+// import { initializeSentry } from "./config/sentry-config";
 
 export const app = express();
 
 // Initialise Sentry
-const SENTRY_DSN = getEnvVariable("SENTRY_DSN");
-initializeSentry(SENTRY_DSN);
+// const SENTRY_DSN = getEnvVariable("SENTRY_DSN");
+// initializeSentry(SENTRY_DSN);
 
 app.set("trust proxy", 1);
 
@@ -62,6 +63,9 @@ app.use((req, res, next) => {
 app.use("/api/v1", routes);
 
 app.use(express.static(path.join(__dirname, "public")));
+
+// Sentry Error Handler
+Sentry.setupExpressErrorHandler(app);
 
 /** Error handling */
 app.use((req, res, next) => {

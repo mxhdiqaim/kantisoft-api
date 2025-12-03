@@ -1,7 +1,7 @@
 import { Response } from "express";
 import { StatusCodes } from "http-status-codes";
 import { getEnvVariable } from "../utils";
-import * as Sentry from "@sentry/node";
+// import * as Sentry from "@sentry/node";
 
 export const handleError2 = (
     res: Response,
@@ -22,7 +22,7 @@ export const handleError2 = (
     }
 
     // Capture the exception with Sentry
-    Sentry.captureException(error);
+    // Sentry.captureException(error);
     // Use a generic message for 500 errors in production
     const errorMessage =
         statusCode === StatusCodes.INTERNAL_SERVER_ERROR
