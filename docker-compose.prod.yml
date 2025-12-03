@@ -91,5 +91,3 @@ services:
 volumes:
   postgres_data_prod:
   redis_data_prod:
-#  certbot_volumes:
-#  certbot_volumes_www:

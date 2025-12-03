@@ -17,7 +17,7 @@ import { handleTargetStore } from "../middlewares/handle-target-store-middleware
 
 const router = express.Router();
 
-router.get("/debug-sentry", function mainHandler(req, res) {
+router.get("/debug-sentry", function mainHandler() {
     throw new Error("My first Sentry error!");
 });
 
