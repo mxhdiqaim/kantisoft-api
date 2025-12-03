@@ -26,9 +26,10 @@ services:
       # Application Settings
       JWT_SECRET: ${JWT_SECRET}
       SESSION_SECRET: ${SESSION_SECRET}
-      #      CLIENT_DOMAIN: ${CLIENT_DOMAIN}
-      APP_URL: ${APP_URL}
-      LANDING_PAGE: ${LANDING_PAGE:-https://kantisoft.com}
+
+      APP_URL: ${APP_URL:-app.kantisoft.com}
+      LANDING_PAGE: ${LANDING_PAGE:-kantisoft.com}
+      SENTRY_DSN: ${SENTRY_DSN}
 
       # Redis Settings
       REDIS_PORT: 6379
