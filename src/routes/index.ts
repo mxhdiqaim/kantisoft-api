@@ -17,6 +17,10 @@ import { handleTargetStore } from "../middlewares/handle-target-store-middleware
 
 const router = express.Router();
 
+router.get("/debug-sentry", function mainHandler(req, res) {
+    throw new Error("My first Sentry error!");
+});
+
 router.get("/health", (_req, res) => {
     res.status(StatusCodes.OK).json({
         status: "ok",
