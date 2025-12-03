@@ -19,17 +19,21 @@ initializeSentry(SENTRY_DSN);
 app.set("trust proxy", 1);
 
 const NODE_ENV = getEnvVariable("NODE_ENV");
+const CLIENT_DOMAIN = getEnvVariable("CLIENT_DOMAIN");
+const LANDING_PAGE = getEnvVariable("LANDING_PAGE");
+const APP_URL = getEnvVariable("APP_URL");
 
 const URL =
     NODE_ENV === "development"
         ? [
               "http://localhost:3000",
               "http://localhost:3001",
-              "http://localhost:3003",
+              "http://localhost:3002",
           ]
         : [
-              `https://${process.env.LANDING_PAGE}`,
-              `https://${process.env.APP_URL}`,
+              `https://${CLIENT_DOMAIN}`,
+              `https://${LANDING_PAGE}`,
+              `https://${APP_URL}`,
           ];
 
 /** Session */
