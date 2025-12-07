@@ -10,18 +10,6 @@ export let pool: Pool;
 export const NODE_ENV = getEnvVariable("NODE_ENV");
 
 if (NODE_ENV === "production") {
-    // Get non-secret variables from .env.prod
-    const host = getEnvVariable("DB_HOST");
-    const port = getEnvVariable("DB_PORT");
-    const user = getEnvVariable("DB_USER");
-    const database = getEnvVariable("DB_NAME");
-
-    // Read the password from the secret file
-    // const passwordFile = getEnvVariable("DB_PASSWORD_FILE");
-    // const password = readFileSync(passwordFile, "utf8").trim();
-
-    // const encodedPassword = encodeURIComponent(password);
-
     // Construct the connection URL
     const connectionString = getEnvVariable("DB_CONNECTION_STRING");
     const sslRequired = getEnvVariable("DB_SSL_REQUIRED") == "true";
