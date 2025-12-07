@@ -1,7 +1,6 @@
 #!/bin/sh
 
 # Check if required environment variables are set
-# Check if required environment variables are set
 if [ -z "$DB_CONNECTION_STRING" ]; then
   echo "Error: DB_CONNECTION_STRING environment variable is not set."
   exit 1
