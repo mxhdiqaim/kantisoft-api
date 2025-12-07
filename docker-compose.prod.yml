@@ -1,6 +1,4 @@
 secrets:
-  db_password_file:
-    file: ./db_password.secret
   redis_password_file:
     file: ./redis_password.secret
 
@@ -31,12 +29,9 @@ services:
       REDIS_HOST: redis_cache
       REDIS_PASSWORD_FILE: /run/secrets/redis_password_file
     depends_on:
-      postgres_db:
-        condition: service_healthy
       redis_cache:
         condition: service_healthy
     secrets:
-      - db_password_file
       - redis_password_file
     healthcheck:
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5473/api/v1/health" ]
@@ -64,5 +59,4 @@ services:
 
 
 volumes:
-  postgres_data_prod:
   redis_data_prod:
