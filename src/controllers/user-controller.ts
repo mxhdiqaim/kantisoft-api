@@ -149,34 +149,28 @@ export const registerManagerAndStore = async (req: Request, res: Response) => {
             error.cause &&
             typeof error.cause === "object" &&
             "code" in error.cause &&
-            error.cause.code === "23505"
+            error.cause.code === "23505" // PostgreSQL unique violation
         ) {
             if ("constraint" in error.cause) {
                 switch (error.cause.constraint) {
-                    case "users_email_unique": // If you have a global unique email constraint
+                    case "users_email_global_unique":
                         return handleError2(
                             res,
-                            "A user with this email already exists globally.",
+                            "A user with this email already exists.",
                             StatusCodes.CONFLICT,
                             error instanceof Error ? error : undefined,
                         );
-                    case "users_storeId_email_unique": // Your storeId, email unique constraint
+                    case "users_phone_global_unique":
                         return handleError2(
                             res,
-                            "A user with this email already exists within a store.",
-                            StatusCodes.CONFLICT,
-                            error instanceof Error ? error : undefined,
-                        );
-                    case "users_storeId_phone_unique": // Your storeId, phone unique constraint
-                        return handleError2(
-                            res,
-                            "A user with this phone number already exists within a store.",
+                            "A user with this phone number already exists.",
                             StatusCodes.CONFLICT,
                             error instanceof Error ? error : undefined,
                         );
                 }
             }
         }
+
         handleError2(
             res,
             "Registration failed. Please try again.",
