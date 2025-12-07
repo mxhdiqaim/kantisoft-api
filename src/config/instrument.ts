@@ -7,5 +7,5 @@ Sentry.init({
     dsn: SENTRY_DSN,
 
     sendDefaultPii: true,
-    // tracesSampleRate: 1.0,
+    tracesSampleRate: 1.0,
 });
