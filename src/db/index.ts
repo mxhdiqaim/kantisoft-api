@@ -20,7 +20,7 @@ if (NODE_ENV === "production") {
 
     if (sslRequired) {
         poolConfig.ssl = {
-            rejectUnauthorized: false, // Often needed for managed DBs
+            rejectUnauthorized: false, // Accept self-signed certificates
         };
     }
 
