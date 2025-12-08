@@ -25,6 +25,9 @@ services:
       LANDING_PAGE: ${LANDING_PAGE:-kantisoft.com}
       SENTRY_DSN: ${SENTRY_DSN}
 
+      # CA Certificate for DigitalOcean Managed Databases
+      NODE_EXTRA_CA_CERTS: /etc/ssl/certs/do-ca-cert.crt
+
       # Redis Settings
       REDIS_PORT: 6379
       REDIS_HOST: redis_cache
@@ -34,6 +37,8 @@ services:
         condition: service_healthy
     secrets:
       - redis_password_file
+    volumes:
+      - /opt/kantisoft/db-certs/ca-certificate.crt:/etc/ssl/certs/do-ca-cert.crt:ro
     healthcheck:
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5473/api/v1/health" ]
       interval: 10s
