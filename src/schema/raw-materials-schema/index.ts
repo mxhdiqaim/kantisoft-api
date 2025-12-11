@@ -6,6 +6,7 @@ import {
     uniqueIndex,
     uuid,
 } from "drizzle-orm/pg-core";
+import { unitOfMeasurement } from "../unit-of-measurement-schema";
 
 // Raw Material Master List (Platform-wide)
 export const rawMaterials = pgTable(
@@ -14,13 +15,10 @@ export const rawMaterials = pgTable(
         id: uuid("id").defaultRandom().primaryKey(),
         name: text("name").notNull(), // e.g. "All-Purpose Flour", "Grade A Eggs"
 
-        baseUnit: text("baseUnit").notNull(), // This is the BASE unit (e.g. 'gram', 'milliliter', 'unit')
-
-        presentationUnit: text("presentationUnit").notNull(), // The common unit for purchasing/reporting (e.g. 'kg', 'litre', 'dozen')
-
-        conversionFactor: doublePrecision("conversionFactor")
+        // References to the unit used for presentation/purchasing (e.g., "Kilogram")
+        unitOfMeasurementId: uuid("unitOfMeasurementId")
             .notNull()
-            .default(1), // The factor to convert PresentationUnit to BaseUnit (e.g. 1000 g = 1 kg)
+            .references(() => unitOfMeasurement.id, { onDelete: "restrict" }),
 
         description: text("description"),
         latestUnitPrice: doublePrecision("latestUnitPrice")

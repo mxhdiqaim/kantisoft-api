@@ -14,10 +14,10 @@ export const billOfMaterials = pgTable(
         id: uuid("id").defaultRandom().primaryKey(),
         menuItemId: uuid("menuItemId")
             .notNull()
-            .references(() => menuItems.id),
+            .references(() => menuItems.id, { onDelete: "restrict" }),
         rawMaterialId: uuid("rawMaterialId")
             .notNull()
-            .references(() => rawMaterials.id),
+            .references(() => rawMaterials.id, { onDelete: "restrict" }),
 
         // Core BOM Fields
         consumptionQuantityBase: doublePrecision(
