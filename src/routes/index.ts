@@ -8,6 +8,7 @@ import stores from "./store-routes";
 import activities from "./activity-routes";
 import inventory from "./inventory-routes";
 import auth from "./auth-routes";
+import unitOfMeasurement from "./unit-of-measurement-routes";
 import { protectedRoute } from "../config/jwt-config";
 import { checkUserHasStore } from "../middlewares/check-user-has-store";
 import { isAuthorized } from "../middlewares/is-authorised-middleware";
@@ -16,10 +17,6 @@ import { StatusCodes } from "http-status-codes";
 import { handleTargetStore } from "../middlewares/handle-target-store-middleware";
 
 const router = express.Router();
-
-router.get("/debug-sentry", function mainHandler() {
-    throw new Error("My first Sentry error!");
-});
 
 router.get("/health", (_req, res) => {
     res.status(StatusCodes.OK).json({
@@ -54,5 +51,6 @@ router.use("/users", checkUserHasStore, users);
 router.use("/menu-items", checkUserHasStore, menuItems);
 router.use("/orders", checkUserHasStore, orders);
 router.use("/dashboard", checkUserHasStore, dashboard);
+router.use("/unit-of-measurement", checkUserHasStore, unitOfMeasurement);
 
 export default router;

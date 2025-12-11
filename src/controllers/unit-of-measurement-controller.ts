@@ -9,16 +9,27 @@ import {
 } from "../schema/unit-of-measurement-schema";
 import db from "../db";
 import {StatusCodes} from "http-status-codes";
+import { handleError2 } from "../service/error-handling";
 
 /**
  * @description Retrieves all Units of Measurement, with optional filtering by unit family.
  * @route GET /api/v1/units
  * @access Manager, Admin
  */
-export async function getAllUnitsOfMeasurement(req: CustomRequest, res: Response) {
+export const getAllUnitsOfMeasurement = async (req: CustomRequest, res: Response) =>{
     try {
+        const currentUser = req.user?.data;
+        const storeId = currentUser?.storeId;
         // Get an optional 'family' filter from query parameters
         const familyFilter = req.query.family as UnitFamilyType | undefined;
+
+        if (!storeId) {
+            return handleError2(
+                res,
+                "User not associated with any store.",
+                StatusCodes.FORBIDDEN,
+            );
+        }
 
         let query = db.select().from(unitOfMeasurement).$dynamic(); // Initialize dynamic query
 
