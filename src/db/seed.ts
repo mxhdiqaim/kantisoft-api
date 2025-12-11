@@ -1,34 +1,83 @@
-import "dotenv/config";
-import { eq } from "drizzle-orm";
-import db, { pool } from ".";
-import { users, UserSchemaT } from "../schema/users-schema";
-import { passwordHashService } from "../service/password-hash-service";
+import {
+    InsertUnitOfMeasurementSchemaT,
+    UnitFamilyType,
+    unitOfMeasurement,
+} from "../schema/unit-of-measurement-schema";
+import db, { pool } from "./index";
 
-const createSeedAdmin = async () => {
+const unitsSeedData: InsertUnitOfMeasurementSchemaT[] = [
+    {
+        name: "Gram",
+        symbol: "g",
+        unitFamily: "weight" as UnitFamilyType,
+        isBaseUnit: true,
+        conversionFactorToBase: 1,
+    },
+    {
+        name: "Kilogram",
+        symbol: "kg",
+        unitFamily: "weight" as UnitFamilyType,
+        isBaseUnit: false,
+        conversionFactorToBase: 1000,
+    },
+    {
+        name: "Milligram",
+        symbol: "mg",
+        unitFamily: "weight" as UnitFamilyType,
+        isBaseUnit: false,
+        conversionFactorToBase: 0.001,
+    },
+    {
+        name: "Milliliter",
+        symbol: "ml",
+        unitFamily: "volume" as UnitFamilyType,
+        isBaseUnit: true,
+        conversionFactorToBase: 1,
+    },
+    {
+        name: "Liter",
+        symbol: "L",
+        unitFamily: "volume" as UnitFamilyType,
+        isBaseUnit: false,
+        conversionFactorToBase: 1000,
+    },
+    {
+        name: "Unit",
+        symbol: "unit",
+        unitFamily: "count" as UnitFamilyType,
+        isBaseUnit: true,
+        conversionFactorToBase: 1,
+    },
+    {
+        name: "Dozen",
+        symbol: "dz",
+        unitFamily: "count" as UnitFamilyType,
+        isBaseUnit: false,
+        conversionFactorToBase: 12,
+    },
+];
+
+const seedUnitsOfMeasurement = async () => {
     try {
-        const data = {
-            firstName: "Musa",
-            lastName: "Ikechi",
-            email: "manager@example.com",
-            password: passwordHashService.hash("password123"),
-            role: "manager",
-            status: "active",
-            phone: "08108904958",
-        } as UserSchemaT;
+        console.log("-> Seeding Units of Measurement...");
 
-        const exist = await db.query.users.findFirst({
-            where: eq(users.email, data.email),
-        });
+        // Use onConflictDoNothing() to prevent errors if the script is run multiple times,
+        // and data with unique constraints (like 'symbol' or 'name') already exists.
+        const result = await db
+            .insert(unitOfMeasurement)
+            .values(unitsSeedData)
+            .onConflictDoNothing()
+            .returning();
 
-        if (exist) {
-            console.log("Admin already exists");
-            return;
+        if (result.length > 0) {
+            console.log(`✅ Successfully inserted ${result.length} new units.`);
+        } else {
+            console.log(
+                "ℹ️ Units already exist in the database. Skipping insertion.",
+            );
         }
-
-        const result = await db.insert(users).values(data).returning();
-        console.log("Created admin:", result[0].email);
     } catch (error) {
-        console.error("Error in createSeedAdmin:", error);
+        console.error("Error in seedUnitsOfMeasurement:", error);
         throw error; // rethrow to be caught by the main seed function
     }
 };
@@ -36,7 +85,12 @@ const createSeedAdmin = async () => {
 const runSeed = async () => {
     console.log("🌱 Starting seed...");
     try {
-        await createSeedAdmin();
+        // Run the new unit seeding function
+        await seedUnitsOfMeasurement();
+
+        // If you still need a seed admin for local development, you could re-introduce it here:
+        // await createSeedAdmin();
+
         console.log("✅ Seed successful!");
     } catch (error) {
         console.error("❌ Seed failed", error);
@@ -47,13 +101,13 @@ const runSeed = async () => {
     }
 };
 
+// The main function structure remains the same for robust execution
 const seed = async () => {
     const client = await pool.connect();
     await runSeed();
     client.release(true);
-    console.log("Seed done");
 };
 
 seed()
-    .then((r) => console.log(r))
+    .then(() => console.log("Seed process finished."))
     .catch((e) => console.error(e));
