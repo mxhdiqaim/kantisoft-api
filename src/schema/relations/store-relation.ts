@@ -3,6 +3,8 @@ import { stores } from "../stores-schema";
 import { users } from "../users-schema";
 import { menuItems } from "../menu-items-schema";
 import { orders } from "../orders-schema";
+import { inventory } from "../inventory-schema";
+import { rawMaterialInventory } from "../raw-materials-schema/raw-material-inventory-schema";
 
 export const storeRelations = relations(stores, ({ one, many }) => ({
     // A store can have many users (employees)
@@ -25,4 +27,8 @@ export const storeRelations = relations(stores, ({ one, many }) => ({
     branches: many(stores, {
         relationName: "storeHierarchy",
     }),
+
+    inventory: many(inventory),
+
+    rawMaterialInventory: many(rawMaterialInventory),
 }));

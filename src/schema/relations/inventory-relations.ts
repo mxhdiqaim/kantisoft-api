@@ -4,6 +4,7 @@ import { users } from "../users-schema";
 import { menuItems } from "../menu-items-schema";
 import { stores } from "../stores-schema";
 import { inventory } from "../inventory-schema";
+import { rawMaterials } from "../raw-materials-schema";
 
 export const inventoryRelations = relations(inventory, ({ one }) => ({
     menuItem: one(menuItems, {
@@ -14,10 +15,6 @@ export const inventoryRelations = relations(inventory, ({ one }) => ({
         fields: [inventory.storeId],
         references: [stores.id],
     }),
-    // menuItem: one(menuItems, {
-    //     fields: [inventory.menuItemId],
-    //     references: [menuItems.id],
-    // }),
 }));
 
 export const inventoryTransactionsRelations = relations(
@@ -37,10 +34,15 @@ export const inventoryTransactionsRelations = relations(
             references: [menuItems.id],
         }),
 
-        // Link storeId to the stores table (good practice to include)
+        // Link storeId to the store table (good practice to include)
         store: one(stores, {
             fields: [inventoryTransactions.storeId],
             references: [stores.id],
+        }),
+
+        rawMaterial: one(rawMaterials, {
+            fields: [inventoryTransactions.rawMaterialId],
+            references: [rawMaterials.id],
         }),
     }),
 );
