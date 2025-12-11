@@ -11,10 +11,10 @@ import {
 
 // Define the core categories of measurement
 export const unitFamilyEnum = pgEnum("unitFamily", [
-    "WEIGHT", // Mass (e.g. kg, g)
-    "VOLUME", // Liquid/Capacity (e.g. L, ml)
-    "COUNT", // Discrete units (e.g. unit, dozen)
-    "AREA", // (Optional: m², sq ft)
+    "weight", // Mass (e.g. kg, g)
+    "volume", // Liquid/Capacity (e.g. L, ml)
+    "count", // Discrete units (e.g. unit, dozen)
+    "area", // (Optional: m², sq ft)
 ]);
 
 export const unitOfMeasurement = pgTable(

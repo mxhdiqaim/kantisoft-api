@@ -43,6 +43,13 @@
       "when": 1765492937322,
       "tag": "0005_same_tattoo",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1765493768866,
+      "tag": "0006_gray_miracleman",
+      "breakpoints": true
     }
   ]
 }
