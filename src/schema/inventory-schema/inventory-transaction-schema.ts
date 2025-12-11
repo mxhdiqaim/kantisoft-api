@@ -9,6 +9,7 @@ import {
 import { menuItems } from "../menu-items-schema";
 import { stores } from "../stores-schema";
 import { users } from "../users-schema";
+import { rawMaterials } from "../raw-materials-schema";
 
 // Transaction types define why the inventory quantity changed
 export const transactionTypeEnum = pgEnum("transactionType", [
@@ -27,6 +28,7 @@ export const inventoryTransactions = pgTable("inventoryTransactions", {
     menuItemId: uuid("menuItemId")
         .notNull()
         .references(() => menuItems.id),
+    rawMaterialId: uuid("rawMaterialId").references(() => rawMaterials.id),
     storeId: uuid("storeId")
         .notNull()
         .references(() => stores.id),
