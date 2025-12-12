@@ -9,6 +9,7 @@ import activities from "./activity-routes";
 import inventory from "./inventory-routes";
 import auth from "./auth-routes";
 import unitOfMeasurement from "./unit-of-measurement-routes";
+import rawMaterials from "./raw-material-route";
 import { protectedRoute } from "../config/jwt-config";
 import { checkUserHasStore } from "../middlewares/check-user-has-store";
 import { isAuthorized } from "../middlewares/is-authorised-middleware";
@@ -43,6 +44,13 @@ router.use(
     "/activities",
     isAuthorized([UserRoleEnum.MANAGER, UserRoleEnum.ADMIN]),
     activities,
+);
+
+// Raw Material
+router.use(
+    "/raw-materials",
+    isAuthorized([UserRoleEnum.MANAGER, UserRoleEnum.ADMIN]),
+    rawMaterials,
 );
 
 // These routes need to be protected and scoped to the user's store
