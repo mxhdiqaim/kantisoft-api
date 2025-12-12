@@ -50,6 +50,13 @@
       "when": 1765493768866,
       "tag": "0006_gray_miracleman",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1765529189622,
+      "tag": "0007_perpetual_guardian",
+      "breakpoints": true
     }
   ]
 }

@@ -15,6 +15,7 @@ export const unitFamilyEnum = pgEnum("unitFamily", [
     "volume", // Liquid/Capacity (e.g. L, ml)
     "count", // Discrete units (e.g. unit, dozen)
     "area", // (Optional: m², sq ft)
+    "length", // (Optional: m, cm, km)
 ]);
 
 export const unitOfMeasurement = pgTable(
@@ -37,6 +38,9 @@ export const unitOfMeasurement = pgTable(
 
         isBaseUnit: boolean("isBaseUnit").notNull().default(false), // True for the base unit in a family (e.g. 'g')
 
+        calculationLogic: text("calculationLogic").default(""), // Explanation of conversion logic
+
+        // Timestamps
         createdAt: timestamp("createdAt").defaultNow().notNull(),
         lastModified: timestamp("lastModified")
             .defaultNow()
