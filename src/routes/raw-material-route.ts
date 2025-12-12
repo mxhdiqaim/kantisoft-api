@@ -6,5 +6,6 @@ const router = express.Router();
 router.get("/", controller.getAllRawMaterial);
 router.get("/:id", controller.getSingleRawMaterial);
 router.post("/create", controller.createRawMaterial);
+router.patch("/:id", controller.updateRawMaterial);
 
 export default router;

@@ -114,8 +114,6 @@ export const getSingleRawMaterial = async (req: CustomRequest, res: Response) =>
     const storeId = currentUser?.storeId;
     const { id: rawMaterialId } = req.params;
 
-    console.log("rawMaterialId: ", rawMaterialId);
-
     if (!storeId) {
         return handleError2(
             res,
@@ -302,3 +300,130 @@ export const createRawMaterial = async (req: CustomRequest, res: Response) => {
         )
     }
 }
+
+/**
+ * @description Updates an existing Raw Material record by ID.
+ * @route PATCH /api/v1/raw-materials/:id
+ * @access Admin, Manager
+ */
+export const updateRawMaterial = async (req: CustomRequest, res: Response) => {
+    const currentUser = req.user?.data;
+    const storeId = currentUser?.storeId;
+    const { id: rawMaterialId } = req.params;
+
+    if (!storeId) {
+        return handleError2(
+            res,
+            'User does not have an associated store.',
+            StatusCodes.BAD_REQUEST
+        )
+    }
+    const {
+        name,
+        description,
+        unitOfMeasurementId,
+        latestUnitPricePresentation
+    } = req.body;
+
+    if (!rawMaterialId) {
+        return handleError2(res, 'Something went wrong!', StatusCodes.BAD_REQUEST);
+    }
+
+    try {
+        const existingMaterial = await db.query.rawMaterials.findFirst({
+            where: eq(rawMaterials.id, rawMaterialId),
+            with: {
+                unitOfMeasurement: true // Fetch the current unit for comparison
+            }
+        });
+
+        if (!existingMaterial) {
+            return handleError2(res, `Raw material not found.`, StatusCodes.NOT_FOUND);
+        }
+
+        const updatePayload: Partial<typeof existingMaterial> = {};
+
+        // Update basic text fields if provided
+        if (name !== undefined) updatePayload.name = name;
+        if (description !== undefined) updatePayload.description = description;
+
+
+        // Determine the unit ID to use for fetching the conversion factor.
+        const targetUnitOfMeasurementId = unitOfMeasurementId || existingMaterial.unitOfMeasurementId;
+
+        let finalBasePrice: number | undefined = undefined;
+        let finalUnitOfMeasurementRecord;
+
+        // Only proceed with unit of measurement/price logic if either the unit OR the price is changing.
+        if (unitOfMeasurementId || latestUnitPricePresentation !== undefined) {
+
+            // Fetch the unit record (either old or new)
+            finalUnitOfMeasurementRecord = await UnitConversionService.fetchUnitById(targetUnitOfMeasurementId);
+
+            if (!finalUnitOfMeasurementRecord) {
+                return handleError2(res, `Unit of Measurement not found.`, StatusCodes.NOT_FOUND);
+            }
+
+            // Calculate the new Base Price
+            // If the user provided a NEW price, use it for conversion.
+            if (latestUnitPricePresentation !== undefined) {
+                // Calculation: Price_Base = Price_Presentation / ConversionFactorToBase
+                finalBasePrice = UnitConversionService.calculateBasePrice(
+                    latestUnitPricePresentation,
+                    finalUnitOfMeasurementRecord
+                );
+            } else {
+                // If NO new price was provided, but the unit changed,
+                // we must re-calculate the Base Price using the OLD Base Price
+                // and the NEW unit's factor. This is a complex scenario,
+                // but for simplicity here, we assume if the unit changes,
+                // the user must provide the price for the new unit.
+                // For this MVP, let's enforce: If the unit changes, the price must be provided.
+                if (unitOfMeasurementId && unitOfMeasurementId !== existingMaterial.unitOfMeasurementId) {
+                    return handleError2(res, 'If changing the Unit of Measurement, you must provide a new latestUnitPricePresentation for the new unit.', StatusCodes.BAD_REQUEST);
+                }
+            }
+
+            // Apply updates to the payload
+            if (unitOfMeasurementId) updatePayload.unitOfMeasurementId = unitOfMeasurementId;
+            if (finalBasePrice !== undefined) updatePayload.latestUnitPrice = finalBasePrice;
+        }
+
+        if (Object.keys(updatePayload).length === 0) {
+            return res.status(StatusCodes.OK).json({ success: true, message: 'No fields provided for update.' });
+        }
+
+        const updatedResult = await db.update(rawMaterials)
+            .set(updatePayload)
+            .where(eq(rawMaterials.id, rawMaterialId))
+            .returning();
+
+        if (updatedResult.length === 0) {
+            return handleError2(res, 'Update failed or raw material not found.', StatusCodes.INTERNAL_SERVER_ERROR);
+        }
+
+        const [updatedItem] = updatedResult;
+
+        // Fetch the unit used for display (could be the old one or the newly provided one)
+        const unitForDisplay = finalUnitOfMeasurementRecord || existingMaterial.unitOfMeasurement;
+
+        const priceForDisplay = latestUnitPricePresentation !== undefined
+            ? latestUnitPricePresentation
+            : UnitConversionService.displayPriceInPresentationUnit(updatedItem.latestUnitPrice, unitForDisplay);
+
+
+        return res.status(StatusCodes.OK).json({
+            ...updatedItem,
+            latestUnitPricePresentation: priceForDisplay, // The formatted price
+            unit: unitForDisplay // Include unit details
+        });
+
+    } catch (error: any) {
+        // Handle unique constraint violation (Raw Material Name must be unique)
+        if (error.code === '23505') {
+            return handleError2(res, 'A raw material with this name already exists.', StatusCodes.CONFLICT, error instanceof Error ? error : undefined);
+        }
+
+        return handleError2(res, 'A server error occurred during the update.', StatusCodes.INTERNAL_SERVER_ERROR, error instanceof Error ? error : undefined);
+    }
+};
