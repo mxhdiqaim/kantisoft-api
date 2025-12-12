@@ -105,6 +105,118 @@ export const getAllRawMaterial = async (req: CustomRequest, res: Response) => {
 }
 
 /**
+ * @description Retrieves a single Raw Material record by ID.
+ * @route GET /api/v1/raw-materials/:id
+ * @access Admin, Manager
+ */
+export const getSingleRawMaterial = async (req: CustomRequest, res: Response) => {
+    const currentUser = req.user?.data;
+    const storeId = currentUser?.storeId;
+    const { id: rawMaterialId } = req.params;
+
+    console.log("rawMaterialId: ", rawMaterialId);
+
+    if (!storeId) {
+        return handleError2(
+            res,
+            'User does not have an associated store.',
+            StatusCodes.BAD_REQUEST
+        )
+    }
+
+    // Basic ID Validation
+    if (!rawMaterialId) {
+        return handleError2(
+            res,
+            'Missing Raw Material ID in request path.',
+            StatusCodes.BAD_REQUEST
+        );
+    }
+
+    try {
+        // We select the necessary fields and join with the unit of the measurement table.
+        const result = await db.select({
+            id: rawMaterials.id,
+            name: rawMaterials.name,
+            description: rawMaterials.description,
+            latestUnitPriceBase: rawMaterials.latestUnitPrice,
+            createdAt: rawMaterials.createdAt,
+            lastModified: rawMaterials.lastModified,
+
+            // Joined Unit Fields
+            unitOfMeasurement: {
+                id: unitOfMeasurement.id,
+                name: unitOfMeasurement.name,
+                symbol: unitOfMeasurement.symbol,
+                conversionFactorToBase: unitOfMeasurement.conversionFactorToBase,
+            }
+        })
+            .from(rawMaterials)
+            .leftJoin(
+                unitOfMeasurement,
+                eq(rawMaterials.unitOfMeasurementId, unitOfMeasurement.id)
+            )
+            .where(eq(rawMaterials.id, rawMaterialId))
+            .limit(1)
+            .execute();
+
+        const rawMaterialItem = result[0];
+
+        if (!rawMaterialItem) {
+            return handleError2(
+                res,
+                `Raw Material not found.`,
+                StatusCodes.NOT_FOUND
+            );
+        }
+
+        // Ensure unit data exists before attempting conversion
+        if (!rawMaterialItem.unitOfMeasurement) {
+            // This case should not happen if onDelete: "restrict" is working, but it's safe to check.
+            return handleError2(
+                res,
+                `Raw Material's unit of measurement data is missing.`,
+                StatusCodes.INTERNAL_SERVER_ERROR
+            );
+        }
+
+        // Calculate the price per Presentation Unit using the service's inverse logic
+        const latestUnitPricePresentation = UnitConversionService.displayPriceInPresentationUnit(
+            rawMaterialItem.latestUnitPriceBase,
+            rawMaterialItem.unitOfMeasurement
+        );
+
+        const formattedResponse = {
+            id: rawMaterialItem.id,
+            name: rawMaterialItem.name,
+            description: rawMaterialItem.description,
+
+            // Price the user provided and expects to see for this unit
+            latestUnitPricePresentation: latestUnitPricePresentation,
+
+            // Unit information
+            unitOfMeasurement: rawMaterialItem.unitOfMeasurement,
+
+            // Internal Base Price (useful for internal logic, but maybe hidden from most users)
+            latestUnitPriceBase: rawMaterialItem.latestUnitPriceBase,
+
+            createdAt: rawMaterialItem.createdAt,
+            lastModified: rawMaterialItem.lastModified,
+        };
+
+        return res.status(StatusCodes.OK).json(formattedResponse);
+
+    } catch (error: any) {
+        return handleError2(
+            res,
+            'A server error occurred while fetching the raw material.',
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined
+        );
+    }
+}
+
+/**
  * @description Creates a new Raw Material record.
  * @route POST /api/v1/raw-materials
  * @access Admin, Manager
@@ -165,14 +277,11 @@ export const createRawMaterial = async (req: CustomRequest, res: Response) => {
         };
 
         // Insert the new Raw Material
-        const result = await db.insert(rawMaterials)
+        const [result] = await db.insert(rawMaterials)
             .values(newRawMaterialData)
             .returning();
 
-        return res.status(StatusCodes.CREATED).json({
-            message: 'Raw material created successfully.',
-            data: result[0],
-        });
+        return res.status(StatusCodes.CREATED).json(result);
 
     } catch (error: any) {
         // Handle unique constraint violation (Raw Material Name must be unique)

@@ -3,8 +3,8 @@ import * as controller from "../controllers/raw-material-controller";
 
 const router = express.Router();
 
-// get all raw material
 router.get("/", controller.getAllRawMaterial);
+router.get("/:id", controller.getSingleRawMaterial);
 router.post("/create", controller.createRawMaterial);
 
 export default router;
