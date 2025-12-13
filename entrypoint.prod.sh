@@ -38,7 +38,12 @@ echo "All services are ready. Running migrations..."
 # Run database migrations using the compiled JavaScript file
 pnpm run migrate:prod
 
-echo "Migrations complete. Starting the API server..."
+echo "Migrations complete. Seeding data..."
+
+# Run database seeds
+pnpm run seed
+
+echo "Seeding complete. Starting the API server..."
 
 # Use exec to ensure the 'pnpm start' process keeps the container alive
 exec pnpm start
