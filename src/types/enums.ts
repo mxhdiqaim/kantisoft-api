@@ -51,6 +51,11 @@ export const RawMaterialStatusEnum = {
     ARCHIVED: "archived",
 } as const;
 
+export const RawMaterialTransactionTypeEnum = {
+    COMING_IN: "comingIn",
+    GOING_OUT: "goingOut",
+} as const;
+
 export const INVENTORY_TRANSACTION_SUMMARY_TYPES = Object.values(
     InventoryTransactionSummaryTypeEnum,
 );

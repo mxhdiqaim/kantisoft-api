@@ -2,7 +2,7 @@ import db from "../db";
 import { and, eq } from "drizzle-orm";
 import { inventory } from "../schema/inventory-schema";
 
-type InventoryStatus = typeof inventory.$inferSelect.status;
+export type StockStatus = "inStock" | "lowStock" | "outOfStock";
 
 // Helper function to check stock existence and authorisation
 export const getInventoryByMenuItemId = async (
@@ -21,12 +21,9 @@ export const getInventoryByMenuItemId = async (
 export const calculateInventoryStatus = (
     quantity: number,
     minStockLevel: number,
-): InventoryStatus => {
-    if (quantity <= 0) {
-        return "outOfStock";
-    }
-    if (quantity <= minStockLevel) {
-        return "lowStock";
-    }
+): StockStatus => {
+    if (quantity <= 0) return "outOfStock";
+    if (quantity <= minStockLevel) return "lowStock";
+
     return "inStock";
 };

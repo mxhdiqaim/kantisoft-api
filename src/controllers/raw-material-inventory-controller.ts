@@ -9,6 +9,12 @@ import {rawMaterialInventory} from "../schema/raw-materials-schema/raw-material-
 import {rawMaterials} from "../schema/raw-materials-schema";
 import {unitOfMeasurement} from "../schema/unit-of-measurement-schema";
 import {UnitConversionService} from "../service/unit-conversion-service";
+import {
+    RawMaterialTransactionSource,
+    rawMaterialTransactionSourceEnum
+} from "../schema/raw-materials-schema/raw-material-stock-transaction-schema";
+import {RawMaterialTransactionTypeEnum} from "../types/enums";
+import {InventoryAdjustmentService} from "../service/raw-material-inventory-adjustment-service";
 
 
 /**
@@ -108,7 +114,7 @@ export const getCurrentRawMaterialStock = async (req: CustomRequest, res: Respon
             rawMaterialName: stockRecord.rawMaterialName,
 
             // Displayed Stock Data
-            quantityPresentation: quantityPresentation, // The amount the user understands (e.g., 50 kg)
+            quantityPresentation: quantityPresentation, // The amount the user understands (e.g. 50 kg)
             minStockLevelPresentation: minStockLevelPresentation,
             unitOfMeasurement: stockRecord.unitOfMeasurement,
             status: stockRecord.status,
@@ -199,6 +205,102 @@ export const createRawMaterialInventoryRecord = async (req: CustomRequest, res: 
         return handleError2(
             res,
             'A server error occurred during inventory setup.',
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined
+        );
+    }
+};
+
+
+/**
+ * @description Records an incoming stock transaction (IN) and updates the inventory quantity.
+ * @route POST /api/v1/raw-material-inventory/:id/stock-in
+ * @access Admin, Manager, Stock Clerk
+ */
+export const addStockToRawMaterial = async (req: CustomRequest, res: Response) => {
+    const currentUser = req.user?.data;
+    const storeId = currentUser?.storeId;
+    const userId = currentUser?.id;
+    const { id: rawMaterialId } = req.params;
+
+    if (!storeId || !userId) {
+        return handleError2(
+            res,
+            'User does not belong to a store or user ID is missing. Please contact support if you believe this is an error.',
+            StatusCodes.BAD_REQUEST
+        );
+    }
+    if (!rawMaterialId) {
+        return handleError2(res, 'Something went wrong', StatusCodes.BAD_REQUEST);
+    }
+
+    const {
+        quantity, // Quantity in the user's unit (Presentation Unit, e.g., 10)
+        unitOfMeasurementId, // The ID of the unit the quantity is measured in (e.g. Kilogram's ID)
+        source, // Reason for the addition (e.g. 'purchase_receipt')
+        documentRefId,
+        notes
+    } = req.body;
+
+    // Validate required transaction fields
+    if (quantity === undefined || unitOfMeasurementId === undefined || source === undefined || typeof quantity !== 'number' || quantity <= 0) {
+        return handleError2(res, 'Quantity (must be > 0), Unit of measurement, and Source are required.', StatusCodes.BAD_REQUEST);
+    }
+
+    // Validate source against the enum
+    if (!Object.values(rawMaterialTransactionSourceEnum.enumValues).includes(source as RawMaterialTransactionSource)) {
+        return handleError2(res, `Invalid transaction source.`, StatusCodes.BAD_REQUEST);
+    }
+
+    try {
+        // Verify that the raw material exists before proceeding
+        const materialExists = await db.query.rawMaterials.findFirst({
+            where: eq(rawMaterials.id, rawMaterialId),
+        });
+
+        if (!materialExists) {
+            return handleError2(res, `Raw material with ID ${rawMaterialId} not found.`, StatusCodes.NOT_FOUND);
+        }
+
+        // Prepare Transaction Data
+        const transactionData = {
+            rawMaterialId: rawMaterialId,
+            storeId: storeId,
+            userId: userId,
+            type: RawMaterialTransactionTypeEnum.COMING_IN,
+            source: source as RawMaterialTransactionSource,
+            documentRefId,
+            notes
+        };
+
+        // Process Adjustment via Service
+        const updatedInventory = await InventoryAdjustmentService.processStockAdjustment(
+            transactionData,
+            quantity, // Presentation quantity
+            unitOfMeasurementId // Presentation unit ID
+        );
+
+        // Format and Return Response
+        // (Similar to GET, calculate presentation quantity for response clarity)
+        const unitRecord = await UnitConversionService.fetchUnitById(updatedInventory.rawMaterialId);
+
+        // This is a quick fix, ideally, the service should return the unit, or the unit should be fetched once.
+        const conversionFactor = unitRecord?.conversionFactorToBase || 1;
+
+        return res.status(StatusCodes.OK).json({
+            ...updatedInventory,
+            currentQuantityPresentation: updatedInventory.quantity / conversionFactor,
+        });
+
+    } catch (error: any) {
+        // Handle custom errors thrown by the service
+        if (error.message.includes('not found') || error.message.includes('does not exist')) {
+            return handleError2(res, error.message, StatusCodes.NOT_FOUND, error);
+        }
+
+        return handleError2(
+            res,
+            'A server error occurred while processing the stock addition.',
             StatusCodes.INTERNAL_SERVER_ERROR,
             error instanceof Error ? error : undefined
         );
