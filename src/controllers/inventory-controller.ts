@@ -297,7 +297,7 @@ export const createInventoryRecord = async (
         if (!menuItemId || quantity === undefined) {
             return handleError2(
                 res,
-                "Menu item ID and initial quantity are required.",
+                "Menu item and initial quantity are required.",
                 StatusCodes.BAD_REQUEST,
             );
         }
