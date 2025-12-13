@@ -41,7 +41,7 @@ pnpm run migrate:prod
 echo "Migrations complete. Seeding data..."
 
 # Run database seeds
-pnpm run seed
+pnpm run seed:prod
 
 echo "Seeding complete. Starting the API server..."
 

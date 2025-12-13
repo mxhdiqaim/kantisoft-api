@@ -11,6 +11,7 @@
     "migrate": "ts-node src/db/migrate.ts",
     "migrate:prod": "node dist/src/db/migrate.js",
     "seed": "ts-node src/db/seed.ts",
+    "seed:prod": "node dist/src/db/seed.js",
     "predeploy": "pnpm run migrate:prod"
   },
   "keywords": [],
