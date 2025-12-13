@@ -57,6 +57,13 @@
       "when": 1765529189622,
       "tag": "0007_perpetual_guardian",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1765616971306,
+      "tag": "0008_many_moon_knight",
+      "breakpoints": true
     }
   ]
 }

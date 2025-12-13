@@ -7,5 +7,6 @@ router.get("/", controller.getAllRawMaterial);
 router.get("/:id", controller.getSingleRawMaterial);
 router.post("/create", controller.createRawMaterial);
 router.patch("/:id", controller.updateRawMaterial);
+router.delete("/:id", controller.deleteRawMaterial);
 
 export default router;

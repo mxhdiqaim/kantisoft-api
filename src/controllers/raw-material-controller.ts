@@ -1,13 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import {Response} from 'express';
-import {InsertRawMaterialSchemaT, rawMaterials} from '../schema/raw-materials-schema';
+import { InsertRawMaterialSchemaT, rawMaterials } from "../schema/raw-materials-schema";
 import {CustomRequest} from "../types/express";
 import {handleError2} from "../service/error-handling";
 import {StatusCodes} from "http-status-codes";
 import db from "../db";
 import { UnitConversionService } from "../service/unit-conversion-service";
 import { unitOfMeasurement } from "../schema/unit-of-measurement-schema";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
+import { RawMaterialStatusEnum } from "../types/enums";
 
 
 /**
@@ -49,6 +50,7 @@ export const getAllRawMaterial = async (req: CustomRequest, res: Response) => {
                 unitOfMeasurement,
                 eq(rawMaterials.unitOfMeasurementId, unitOfMeasurement.id)
             )
+            .where(eq(rawMaterials.status, RawMaterialStatusEnum.ACTIVE))
             .execute();
 
         // Iterate through results to convert the stored Base Price back to the
@@ -133,7 +135,7 @@ export const getSingleRawMaterial = async (req: CustomRequest, res: Response) =>
 
     try {
         // We select the necessary fields and join with the unit of the measurement table.
-        const result = await db.select({
+        const [rawMaterialItem] = await db.select({
             id: rawMaterials.id,
             name: rawMaterials.name,
             description: rawMaterials.description,
@@ -154,11 +156,12 @@ export const getSingleRawMaterial = async (req: CustomRequest, res: Response) =>
                 unitOfMeasurement,
                 eq(rawMaterials.unitOfMeasurementId, unitOfMeasurement.id)
             )
-            .where(eq(rawMaterials.id, rawMaterialId))
+            .where(and(
+                eq(rawMaterials.id, rawMaterialId),
+                eq(rawMaterials.status, RawMaterialStatusEnum.ACTIVE)
+            ))
             .limit(1)
             .execute();
-
-        const rawMaterialItem = result[0];
 
         if (!rawMaterialItem) {
             return handleError2(
@@ -425,5 +428,60 @@ export const updateRawMaterial = async (req: CustomRequest, res: Response) => {
         }
 
         return handleError2(res, 'A server error occurred during the update.', StatusCodes.INTERNAL_SERVER_ERROR, error instanceof Error ? error : undefined);
+    }
+};
+
+/**
+ * @description Soft deletes (archives) a single Raw Material record by ID.
+ * @route DELETE /api/v1/raw-materials/:id
+ * @access Admin, Manager
+ */
+export const deleteRawMaterial = async (req: CustomRequest, res: Response) => {
+    const currentUser = req.user?.data;
+    const storeId = currentUser?.storeId;
+    const { id: rawMaterialId } = req.params;
+
+    if (!storeId) {
+        return handleError2(
+            res,
+            'User does not have an associated store.',
+            StatusCodes.BAD_REQUEST
+        )
+    }
+
+    if (!rawMaterialId) {
+        return handleError2(res, 'Missing Raw Material', StatusCodes.BAD_REQUEST);
+    }
+
+    try {
+        const [result] = await db.update(rawMaterials)
+            .set({
+                status: RawMaterialStatusEnum.DELETED, // Set the status to 'deleted'
+            })
+            .where(eq(rawMaterials.id, rawMaterialId))
+            .returning({ id: rawMaterials.id, name: rawMaterials.name, status: rawMaterials.status }); // Return only key confirmation fields
+
+        if (!result) {
+            return handleError2(
+                res,
+                `Raw material not found.`,
+                StatusCodes.NOT_FOUND
+            );
+        }
+
+        return res.status(StatusCodes.OK).json(result);
+
+    } catch (error: any) {
+        // This is important: if other tables (like inventory or recipes) have a
+        // FOREIGN KEY constraint that prevents setting status to 'archived', you will get a PostgreSQL error here.
+        // Assuming your foreign keys allow the update of a simple status field,
+        // the generic catch block handles other internal errors.
+
+        return handleError2(
+            res,
+            'A server error occurred during the archive operation.',
+            StatusCodes.INTERNAL_SERVER_ERROR,
+            error instanceof Error ? error : undefined
+        );
     }
 };
