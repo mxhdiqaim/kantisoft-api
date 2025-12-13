@@ -28,8 +28,8 @@ echo "Running database migrations..."
 # Run database migrations
 pnpm run migrate
 
-## Run database seeds
-#pnpm run seed
+# Run database seeds
+pnpm run seed
 
 echo "Migrations complete. Starting the API server..."
 

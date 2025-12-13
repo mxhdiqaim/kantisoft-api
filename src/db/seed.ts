@@ -122,74 +122,57 @@ const unitsSeedData: InsertUnitOfMeasurementSchemaT[] = [
 ];
 
 const seedUnitsOfMeasurement = async () => {
-    try {
-        console.log("-> Seeding Units of Measurement...");
+    console.log("-> Seeding Units of Measurement...");
 
-        // Perform the Upsert operation
-        const result = await db
-            .insert(unitOfMeasurement)
-            .values(unitsSeedData)
-            .onConflictDoUpdate({
-                // Use the unique index on the 'symbol' column to detect conflicts
-                target: unitOfMeasurement.symbol,
+    // Perform the Upsert operation
+    const result = await db
+        .insert(unitOfMeasurement)
+        .values(unitsSeedData)
+        .onConflictDoUpdate({
+            // Use the unique index on the 'symbol' column to detect conflicts
+            target: unitOfMeasurement.symbol,
 
-                // Define which columns to update if a conflict is detected.
-                // We update all other fields that might change (name, family, factors).
-                set: {
-                    name: sql`excluded
-                    .
-                    name`, // Update with the incoming value
-                    unitFamily: sql`excluded
-                    .
-                    "unitFamily"`, // Update with the incoming value
-                    isBaseUnit: sql`excluded
-                    .
-                    "isBaseUnit"`, // Update with the incoming value
-                    conversionFactorToBase: sql`excluded
-                    .
-                    "conversionFactorToBase"`, // Update with the incoming value
-                    calculationLogic: sql`excluded
-                    .
-                    "calculationLogic"`, // Update with the incoming value
-                },
-            })
-            .returning();
+            // Define which columns to update if a conflict is detected.
+            // We update all other fields that might change (name, family, factors).
+            set: {
+                name: sql`excluded
+                .
+                name`, // Update with the incoming value
+                unitFamily: sql`excluded
+                .
+                "unitFamily"`, // Update with the incoming value
+                isBaseUnit: sql`excluded
+                .
+                "isBaseUnit"`, // Update with the incoming value
+                conversionFactorToBase: sql`excluded
+                .
+                "conversionFactorToBase"`, // Update with the incoming value
+                calculationLogic: sql`excluded
+                .
+                "calculationLogic"`, // Update with the incoming value
+            },
+        })
+        .returning();
 
-        console.log(
-            `✅ Successfully processed ${result.length} unit of measurement records (Inserted/Updated).`,
-        );
-    } catch (error) {
-        console.error("Error in seedUnitsOfMeasurement:", error);
-        throw error; // rethrow to be caught by the main seed function
-    }
+    console.log(
+        `✅ Successfully processed ${result.length} unit of measurement records (Inserted/Updated).`,
+    );
 };
 
-const runSeed = async () => {
+const main = async () => {
     console.log("🌱 Starting seed...");
-    try {
-        // Run the new unit seeding function
-        await seedUnitsOfMeasurement();
+    await seedUnitsOfMeasurement();
+    // Add other seed functions here if needed
+    console.log("✅ Seed successful!");
+};
 
-        // If you still need a seed admin for local development, you could re-introduce it here:
-        // await createSeedAdmin();
-
-        console.log("✅ Seed successful!");
-    } catch (error) {
-        console.error("❌ Seed failed", error);
+main()
+    .catch((error) => {
+        console.error("❌ Seed failed:", error);
         process.exit(1);
-    } finally {
-        await pool.end(); // properly close the pool
-        console.log("🔌 Pool ended.");
-    }
-};
-
-// The main function structure remains the same for robust execution
-const seed = async () => {
-    const client = await pool.connect();
-    await runSeed();
-    client.release(true);
-};
-
-seed()
-    .then(() => console.log("Seed process finished."))
-    .catch((e) => console.error(e));
+    })
+    .finally(async () => {
+        console.log("🔌 Closing database connection pool...");
+        await pool.end();
+        console.log("🔌 Pool closed. Seed process finished.");
+    });
